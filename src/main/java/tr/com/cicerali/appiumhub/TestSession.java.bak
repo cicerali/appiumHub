@@ -1,0 +1,162 @@
+package tr.com.cicerali.appiumhub;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.*;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.Enumeration;
+import java.util.Map;
+import java.util.Objects;
+
+public class TestSession {
+    private volatile long sessionCreatedAt;
+    private volatile long lastActivity;
+    private final WebDriverRequest webDriverRequest;
+    private final RemoteNode remoteNode;
+    private String sessionKey;
+
+    public TestSession(WebDriverRequest requestedCapabilities, RemoteNode remoteNode) {
+        this.webDriverRequest = requestedCapabilities;
+        this.remoteNode = remoteNode;
+        this.lastActivity = System.currentTimeMillis();
+    }
+
+    public void forwardRequest(HttpServletResponse response) throws IOException, HubSessionException {
+        forwardRequest(response, false);
+    }
+
+    public void forwardRequest(HttpServletResponse response, boolean newSession) throws IOException, HubSessionException {
+        this.lastActivity = System.currentTimeMillis();
+        RestTemplate restTemplate = remoteNode.getRestTemplate();
+
+        URL remoteURL = remoteNode.getConfiguration().getUrl();
+        String pathSpec = webDriverRequest.getServletPath() + webDriverRequest.getContextPath();
+        String path = webDriverRequest.getRequestURI();
+        if (!path.startsWith(pathSpec)) {
+            throw new IllegalStateException(
+                    "Expected path " + path + " to start with pathSpec " + pathSpec);
+        }
+        String end = path.substring(pathSpec.length());
+        String ok = remoteURL + end;
+        if (webDriverRequest.getQueryString() != null) {
+            ok += "?" + webDriverRequest.getQueryString();
+        }
+        String uri = new URL(remoteURL, ok).toExternalForm();
+
+        lastActivity = System.currentTimeMillis();
+        MultiValueMap<String, String> headers = new HttpHeaders();
+
+        for (Enumeration<String> e = webDriverRequest.getHeaderNames(); e.hasMoreElements(); ) {
+            String headerName = e.nextElement();
+            if ("Content-Length".equalsIgnoreCase(headerName)) {
+                continue; // already set
+            }
+
+            headers.add(headerName, webDriverRequest.getHeader(headerName));
+        }
+
+
+        HttpEntity<byte[]> entity = new HttpEntity<>(webDriverRequest.getBody(), headers);
+        ResponseEntity<byte[]> responseEntity = restTemplate.exchange(uri, HttpMethod.POST, entity, byte[].class);
+
+        lastActivity = System.currentTimeMillis();
+        HttpStatus httpStatus = responseEntity.getStatusCode();
+        response.setStatus(httpStatus.value());
+        processResponseHeaders(webDriverRequest, response, remoteURL, responseEntity);
+        if (!httpStatus.is4xxClientError() || !httpStatus.is5xxServerError()) {
+            setSessionKey(responseEntity);
+        }
+
+        if (this.sessionKey == null) {
+            throw new HubSessionException(
+                    "webdriver new session JSON response body did not contain a session Id");
+        }
+
+        this.sessionCreatedAt = this.lastActivity;
+
+        if (responseEntity.getBody() != null) {
+            try (OutputStream out = response.getOutputStream()) {
+                if (!response.containsHeader("Content-Length")) {
+                    response.setIntHeader("Content-Length", Objects.requireNonNull(responseEntity.getBody()).length);
+                }
+                out.write(responseEntity.getBody());
+            }
+        }
+        response.getOutputStream().write(Objects.requireNonNull(responseEntity.getBody()));
+        response.flushBuffer();
+    }
+
+    public void forwardNewSessionRequest(HttpServletResponse response) throws IOException, HubSessionException {
+        forwardRequest(response, true);
+    }
+
+    private void setSessionKey(ResponseEntity<byte[]> responseEntity) throws IOException {
+        byte[] body = responseEntity.getBody();
+        if (responseEntity.getStatusCodeValue() == HttpServletResponse.SC_OK) {
+
+            ObjectMapper objectMapper = new ObjectMapper();
+
+            JsonNode root = objectMapper.reader().readTree(body);
+            JsonNode session = root.get("sessionId");
+            if (session != null && session.isValueNode()) {
+                this.sessionKey = session.textValue();
+            } else {
+                JsonNode value = root.get("value");
+                Map<String, String> map = objectMapper.convertValue(value, new TypeReference<Map<String, String>>() {
+                });
+                this.sessionKey = map.get("sessionId");
+            }
+        }
+    }
+
+    private void processResponseHeaders(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            URL remoteURL,
+            ResponseEntity<?> responseEntity) throws MalformedURLException {
+        String pathSpec = request.getServletPath() + request.getContextPath();
+        for (String name : responseEntity.getHeaders().keySet()) {
+            for (String value : Objects.requireNonNull(responseEntity.getHeaders().get(name))) {
+                // HttpEntity#getContent() chews up the chunk-size octet (i.e., the InputStream does not
+                // actually map 1:1 to the underlying response body). This breaks any client expecting the
+                // chunk size. We could try to recreate it, but since the chunks are already read in and
+                // decoded, you'd end up with a single chunk, which isn't all that useful. So, we return the
+                // response as a traditional response with a Content-Length header, obviating the need for
+                // the Transfer-Encoding header.
+                if (name.equalsIgnoreCase("Transfer-Encoding") && value.equalsIgnoreCase("chunked")) {
+                    continue;
+                }
+
+                // the location needs to point to the hub that will proxy
+                // everything.
+                if (name.equalsIgnoreCase("Location")) {
+                    URL returnedLocation = new URL(remoteURL, value);
+                    String driverPath = remoteURL.getPath();
+                    String wrongPath = returnedLocation.getPath();
+                    String correctPath = wrongPath.replace(driverPath, "");
+                    URL url = new URL(request.getRequestURL().toString());
+                    response.setHeader(name, url.getProtocol() + "://" + url.getHost() + url.getPort() + pathSpec + correctPath);
+                } else {
+                    response.setHeader(name, value);
+                }
+            }
+        }
+    }
+
+    public void clean() {
+        // TODO
+    }
+
+    public String getSessionKey() {
+        return sessionKey;
+    }
+}

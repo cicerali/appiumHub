@@ -1,0 +1,2 @@
+org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+  tr.com.cicerali.appiumhub.HubAutoConfiguration
