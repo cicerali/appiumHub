@@ -144,6 +144,7 @@ public class RemoteNode {
     public void clean() {
         // TODO other things
         this.nodeControl.interrupt();
+        setBusy(false);
     }
 
     public void destroy() {

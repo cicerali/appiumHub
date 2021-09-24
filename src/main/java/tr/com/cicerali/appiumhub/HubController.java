@@ -9,12 +9,14 @@ import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 import java.util.Map;
 
+import static org.springframework.web.bind.annotation.RequestMethod.*;
+
 
 @RestController
-@RequestMapping()
+@RequestMapping("${appium-hub.pathPrefix:}")
 public class HubController {
 
-    private HubCore hubCore;
+    private final HubCore hubCore;
 
     @Autowired
     public HubController(HubCore hubCore) {
@@ -31,8 +33,23 @@ public class HubController {
         return hubCore.getNodeStatus(id);
     }
 
-    @RequestMapping(value = "/wd/hub/**", method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.DELETE})
-    public ResponseEntity<?> webDriver(HttpServletRequest request) throws HubSessionException, InterruptedException {
-        return hubCore.process(request);
+    @GetMapping("/wd/hub/sessions")
+    public SessionData sessions() {
+        return hubCore.processGetSessions();
+    }
+
+    @RequestMapping(value = "/wd/hub/session/{sessionKey}/**", method = {GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, TRACE})
+    public ResponseEntity<byte[]> regular(HttpServletRequest request, @PathVariable("sessionKey") String sessionKey) throws HubSessionException {
+        return hubCore.processRegularSession(request, sessionKey);
+    }
+
+    @PostMapping("/wd/hub/session")
+    public ResponseEntity<byte[]> start(HttpServletRequest request) throws HubSessionException, InterruptedException {
+        return hubCore.processStartSession(request);
+    }
+
+    @DeleteMapping("/wd/hub/session/{sessionKey}")
+    public ResponseEntity<byte[]> delete(HttpServletRequest request, @PathVariable("sessionKey") String sessionKey) throws HubSessionException {
+        return hubCore.processDeleteSession(request, sessionKey);
     }
 }

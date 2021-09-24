@@ -31,7 +31,7 @@ public class HubCore {
     public Map<String, Object> getNodeStatus(String id) {
         RemoteNode remoteNode = getNodeById(id);
         if (remoteNode == null) {
-            throw new NoSuchElementException("Cannot find proxy with ID =" + id + " in the registry.");
+            throw new NodeNotFoundException("Cannot find proxy with ID =" + id + " in the registry.");
         }
         Map<String, Object> res = new TreeMap<>();
         res.put("msg", "proxy found !");
@@ -60,42 +60,42 @@ public class HubCore {
         }
     }
 
-    public ResponseEntity<?> process(HttpServletRequest request) throws HubSessionException, InterruptedException {
-        WebDriverRequest webDriverRequest = new WebDriverRequest(request);
-        switch (webDriverRequest.getRequestType()) {
-            case START_SESSION:
-                return processNewSessionRequest(webDriverRequest);
-            case REGULAR:
-            case DELETE_SESSION:
-                String key = webDriverRequest.getSessionKey();
-                if (key == null) {
-                    throw new HubSessionException("Session not found in request");
-                }
-                ResponseEntity<?> res = forwardRequest(webDriverRequest);
-                if (webDriverRequest.getRequestType() == RequestType.DELETE_SESSION) {
-                    TestSession testSession = getSession(key);
-                    cleanSession(testSession, SessionTerminationReason.CLIENT_STOPPED_SESSION);
-                    wakeUpWaiters();
-                }
-                return res;
-            default:
-                throw new HubSessionException("Unknown request type: " + webDriverRequest.getRequestType());
-        }
+    public SessionData processGetSessions() {
+        return sessionManager.getAllSessions();
     }
 
-    private ResponseEntity<?> forwardRequest(WebDriverRequest webDriverRequest) throws HubSessionException {
-        TestSession testSession = getSession(webDriverRequest.getSessionKey());
+    public ResponseEntity<byte[]> processRegularSession(HttpServletRequest request, String sessionKey) throws HubSessionException {
+        RegularSessionRequest sessionRequest = new RegularSessionRequest(request, sessionKey);
+        return forwardRequest(sessionRequest);
+    }
+
+    public ResponseEntity<byte[]> processDeleteSession(HttpServletRequest request, String sessionKey) throws HubSessionException {
+        RegularSessionRequest sessionRequest = new RegularSessionRequest(request, sessionKey, RequestType.DELETE_SESSION);
+        ResponseEntity<byte[]> res = forwardRequest(sessionRequest);
+        TestSession testSession = getSession(sessionKey);
+        cleanSession(testSession, SessionTerminationReason.CLIENT_STOPPED_SESSION);
+        wakeUpWaiters();
+        return res;
+    }
+
+    public ResponseEntity<byte[]> processStartSession(HttpServletRequest request) throws HubSessionException, InterruptedException {
+        StartSessionRequest sessionRequest = new StartSessionRequest(request);
+        return processNewSessionRequest(sessionRequest);
+    }
+
+    private ResponseEntity<byte[]> forwardRequest(RegularSessionRequest sessionRequest) throws HubSessionException {
+        TestSession testSession = getSession(sessionRequest.getSessionKey());
         if (testSession == null) {
-            SessionTerminationReason reason = getTerminationReason(webDriverRequest.getSessionKey());
+            SessionTerminationReason reason = getTerminationReason(sessionRequest.getSessionKey());
             if (reason == null) {
                 throw new SessionNotFoundException("Session not found");
             } else {
-                throw new SessionClosedException("Session " + webDriverRequest.getSessionKey() + " already closed, reason: " + reason);
+                throw new SessionClosedException("Session " + sessionRequest.getSessionKey() + " already closed, reason: " + reason);
             }
         }
 
         try {
-            return testSession.forwardRequest();
+            return testSession.forwardRegularRequest(sessionRequest);
         } catch (Exception e) {
 
             if (e.getCause() instanceof ResourceAccessException) {
@@ -127,15 +127,18 @@ public class HubCore {
         return sessionManager.getActiveSession(sessionKey);
     }
 
-    private ResponseEntity<?> processNewSessionRequest(WebDriverRequest webDriverRequest) throws HubSessionException, InterruptedException {
+    private ResponseEntity<byte[]> processNewSessionRequest(StartSessionRequest sessionRequest) throws HubSessionException, InterruptedException {
+
         /* checking if any node has capability to handle this request
          * it is an initial check, if no matching it can throw an exception depending on configuration */
-        verifyDesiredCapabilities(webDriverRequest.getDesiredCapabilities());
+        verifyDesiredCapabilities(sessionRequest.getDesiredCapabilities());
 
         /* will try to create session on a node or throw exception because of timeout */
-        TestSession testSession = getNewSession(webDriverRequest);
+        TestSession testSession = getNewSession(sessionRequest);
         try {
-            return testSession.forwardNewSessionRequest();
+            ResponseEntity<byte[]> response = testSession.forwardNewSessionRequest();
+            sessionManager.addSession(testSession);
+            return response;
         } catch (Exception e) {
             cleanSession(testSession, SessionTerminationReason.CREATION_FAILED);
             wakeUpWaiters();
@@ -143,7 +146,7 @@ public class HubCore {
         }
     }
 
-    public TestSession getNewSession(WebDriverRequest webDriverRequest) throws HubSessionException, InterruptedException {
+    public TestSession getNewSession(StartSessionRequest sessionRequest) throws HubSessionException, InterruptedException {
         List<RemoteNode> sorted = getSorted();
         long begin = System.currentTimeMillis();
         long diff;
@@ -151,7 +154,7 @@ public class HubCore {
 
         do {
             remoteNode = sorted.stream().filter(n -> !n.isBusy()).filter(n -> n.lock.tryLock()).filter(n -> {
-                boolean ret = n.hasCapability(webDriverRequest.getDesiredCapabilities());
+                boolean ret = n.hasCapability(sessionRequest.getDesiredCapabilities());
                 if (!ret) {
                     n.lock.unlock();
                 }
@@ -172,7 +175,7 @@ public class HubCore {
         if (remoteNode == null) {
             throw new HubSessionException("Create session timeout");
         }
-        TestSession testSession = new TestSession(webDriverRequest, remoteNode);
+        TestSession testSession = new TestSession(sessionRequest, remoteNode);
         remoteNode.setBusy(true);
         remoteNode.setTestSession(testSession);
         remoteNode.lock.unlock();
@@ -220,4 +223,5 @@ public class HubCore {
     public HubConfig getHubConfig() {
         return hubConfig;
     }
+
 }

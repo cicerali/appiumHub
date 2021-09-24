@@ -3,7 +3,10 @@ package tr.com.cicerali.appiumhub;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 
@@ -13,54 +16,45 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 public class TestSession {
     private volatile long sessionCreatedAt;
     private volatile long lastActivity;
-    private final WebDriverRequest webDriverRequest;
+    private final StartSessionRequest startSessionRequest;
     private final RemoteNode remoteNode;
     private String sessionKey;
-
+    private final Map<String, Object> sessionData = new LinkedHashMap<>();
     private volatile boolean stopped = false;
 
-    public TestSession(WebDriverRequest requestedCapabilities, RemoteNode remoteNode) {
-        this.webDriverRequest = requestedCapabilities;
+    public TestSession(StartSessionRequest startSessionRequest, RemoteNode remoteNode) {
+        this.startSessionRequest = startSessionRequest;
         this.remoteNode = remoteNode;
         this.lastActivity = System.currentTimeMillis();
     }
 
-    public ResponseEntity<?> forwardRequest() throws IOException, HubSessionException {
-        return forwardRequest(false);
+    public ResponseEntity<byte[]> forwardRegularRequest(RegularSessionRequest sessionRequest) throws IOException, HubSessionException {
+        return forwardRequest(sessionRequest);
     }
 
-    public ResponseEntity<?> forwardNewSessionRequest() throws IOException, HubSessionException {
-        return forwardRequest(true);
+    public ResponseEntity<byte[]> forwardNewSessionRequest() throws IOException, HubSessionException {
+        return forwardRequest(startSessionRequest);
     }
 
-    private ResponseEntity<?> forwardRequest(boolean newSession) throws IOException, HubSessionException {
+    private ResponseEntity<byte[]> forwardRequest(WebDriverRequest webDriverRequest) throws IOException, HubSessionException {
 
         this.lastActivity = System.currentTimeMillis();
         RestTemplate restTemplate = remoteNode.getRestTemplate();
 
         URL remoteURL = remoteNode.getConfiguration().getUrl();
-        String pathSpec = webDriverRequest.getServletPath() + webDriverRequest.getContextPath();
-        String path = webDriverRequest.getRequestURI();
-        if (!path.startsWith(pathSpec)) {
-            throw new IllegalStateException(
-                    "Expected path " + path + " to start with pathSpec " + pathSpec);
-        }
-        String end = path.substring(pathSpec.length());
+        String end = webDriverRequest.getPath();
         String ok = remoteURL + end;
         if (webDriverRequest.getQueryString() != null) {
             ok += "?" + webDriverRequest.getQueryString();
         }
         String uri = new URL(remoteURL, ok).toExternalForm();
 
-        lastActivity = System.currentTimeMillis();
+        this.lastActivity = System.currentTimeMillis();
         MultiValueMap<String, String> headers = new HttpHeaders();
 
         for (Enumeration<String> e = webDriverRequest.getHeaderNames(); e.hasMoreElements(); ) {
@@ -75,15 +69,13 @@ public class TestSession {
         HttpMethod httpMethod = HttpMethod.resolve(webDriverRequest.getMethod());
         ResponseEntity<byte[]> responseEntity = restTemplate.exchange(uri, Objects.requireNonNull(httpMethod), entity, byte[].class);
 
-        lastActivity = System.currentTimeMillis();
-        HttpStatus httpStatus = responseEntity.getStatusCode();
+        this.lastActivity = System.currentTimeMillis();
         processResponseHeaders(webDriverRequest, remoteURL, responseEntity);
 
-        if (newSession && (!httpStatus.is4xxClientError() || !httpStatus.is5xxServerError())) {
+        if (webDriverRequest.getRequestType() == RequestType.START_SESSION) {
             setSessionKey(responseEntity);
             if (this.sessionKey == null) {
-                throw new SessionCreateException(
-                        "webdriver new session JSON response body did not contain a session Id");
+                throw new SessionCreateException("webdriver new session JSON response body did not contain a session Id");
             }
             this.sessionCreatedAt = this.lastActivity;
         }
@@ -97,17 +89,11 @@ public class TestSession {
         if (responseEntity.getStatusCodeValue() == HttpServletResponse.SC_OK) {
 
             ObjectMapper objectMapper = new ObjectMapper();
-
             JsonNode root = objectMapper.reader().readTree(body);
-            JsonNode session = root.get("sessionId");
-            if (session != null && session.isValueNode()) {
-                this.sessionKey = session.textValue();
-            } else {
-                JsonNode value = root.get("value");
-                Map<String, String> map = objectMapper.convertValue(value, new TypeReference<Map<String, String>>() {
-                });
-                this.sessionKey = map.get("sessionId");
-            }
+            this.sessionKey = root.get("sessionId").textValue();
+            this.sessionData.put("id", sessionKey);
+            this.sessionData.put("capabilities", objectMapper.convertValue(root.get("value"), new TypeReference<Map<String, Object>>() {
+            }));
         }
     }
 
@@ -157,5 +143,13 @@ public class TestSession {
 
     public void setStopped(boolean stopped) {
         this.stopped = stopped;
+    }
+
+    public StartSessionRequest getStartSessionRequest() {
+        return startSessionRequest;
+    }
+
+    public Map<String, Object> getSessionData() {
+        return sessionData;
     }
 }
