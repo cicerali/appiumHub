@@ -1,4 +1,4 @@
-package tr.com.cicerali.appiumhub;
+package tr.com.cicerali.appiumhub.exception;
 
 import java.util.Objects;
 

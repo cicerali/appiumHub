@@ -22,6 +22,10 @@ public enum SessionTerminationReason {
      */
     NODE_REREGISTRATION,
     /**
+     * triggered by node unreachable
+     */
+    NODE_UNREACHABLE,
+    /**
      * triggered for socket timeout
      */
     SO_TIMEOUT

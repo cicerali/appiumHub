@@ -13,9 +13,9 @@ public class HubProperties {
     /**
      * <Boolean> true or false : If true, hub will terminate session if any proxy error
      * occurs. If set to false, the session will remain open until it is stopped by the
-     * client or it times out.
+     * client, or it times out.
      */
-    private Boolean throwOnProxyError;
+    private Boolean stopOnProxyError;
 
     /**
      * <Integer> in seconds : number of seconds a test session is allowed to
@@ -32,7 +32,10 @@ public class HubProperties {
      * become available will time out. When that happens, the test will throw an
      * exception before attempting to start it. An unspecified, zero, or negative
      * value means wait indefinitely.
-     * Default: -1
+     * it can be buggy if newSessionWaitTimeout selected to long. Worker threads will
+     * wait this timeout and requests cannot be processed when no free  workers are
+     * available. Also, if client disconnect no way to detect it until timeout reached.
+     * Default: 60000
      */
     private Integer newSessionWaitTimeout;
 
@@ -97,12 +100,12 @@ public class HubProperties {
         this.pathPrefix = pathPrefix;
     }
 
-    public Boolean getThrowOnProxyError() {
-        return throwOnProxyError;
+    public Boolean getStopOnProxyError() {
+        return stopOnProxyError;
     }
 
-    public void setThrowOnProxyError(Boolean throwOnProxyError) {
-        this.throwOnProxyError = throwOnProxyError;
+    public void setStopOnProxyError(Boolean stopOnProxyError) {
+        this.stopOnProxyError = stopOnProxyError;
     }
 
     public Integer getBrowserTimeout() {

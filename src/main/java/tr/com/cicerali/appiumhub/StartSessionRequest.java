@@ -3,6 +3,7 @@ package tr.com.cicerali.appiumhub;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import tr.com.cicerali.appiumhub.exception.RequestParseException;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
@@ -12,20 +13,20 @@ import java.util.Map;
 public class StartSessionRequest extends WebDriverRequest {
     private final Map<String, Object> desiredCapabilities;
 
-    public StartSessionRequest(HttpServletRequest request) throws HubSessionException {
+    public StartSessionRequest(HttpServletRequest request) throws RequestParseException {
         super(request);
         this.requestType = RequestType.START_SESSION;
         this.desiredCapabilities = extractDesiredCapabilities();
     }
 
-    private Map<String, Object> extractDesiredCapabilities() throws HubSessionException {
+    private Map<String, Object> extractDesiredCapabilities() throws RequestParseException {
 
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode root;
         try {
             root = objectMapper.reader().readTree(body);
         } catch (IOException e) {
-            throw new HubSessionException("Could not parse request", e);
+            throw new RequestParseException("Could not parse request", e);
         }
 
         /* check JSONWP */
@@ -57,7 +58,7 @@ public class StartSessionRequest extends WebDriverRequest {
             }
         }
 
-        throw new HubSessionException("Could not found desired capabilities in request");
+        throw new RequestParseException("Could not found desired capabilities in request");
     }
 
     public Map<String, Object> getDesiredCapabilities() {

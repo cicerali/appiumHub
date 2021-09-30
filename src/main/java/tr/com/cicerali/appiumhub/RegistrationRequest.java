@@ -28,4 +28,12 @@ public class RegistrationRequest {
     public void setConfiguration(NodeConfiguration configuration) {
         this.configuration = configuration;
     }
+
+    @Override
+    public String toString() {
+        return "RegistrationRequest{" +
+                "capabilities=" + capabilities +
+                ", configuration=" + configuration +
+                '}';
+    }
 }

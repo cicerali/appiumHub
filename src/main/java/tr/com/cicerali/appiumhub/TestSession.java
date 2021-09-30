@@ -3,12 +3,16 @@ package tr.com.cicerali.appiumhub;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import tr.com.cicerali.appiumhub.exception.HubSessionException;
+import tr.com.cicerali.appiumhub.exception.SessionCreateException;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -19,6 +23,9 @@ import java.net.URL;
 import java.util.*;
 
 public class TestSession {
+
+    private static final Logger logger = LoggerFactory.getLogger(TestSession.class);
+
     private volatile long sessionCreatedAt;
     private volatile long lastActivity;
     private final StartSessionRequest startSessionRequest;
@@ -26,6 +33,8 @@ public class TestSession {
     private String sessionKey;
     private final Map<String, Object> sessionData = new LinkedHashMap<>();
     private volatile boolean stopped = false;
+    private boolean forwardingRequest = false;
+    private boolean started = false;
 
     public TestSession(StartSessionRequest startSessionRequest, RemoteNode remoteNode) {
         this.startSessionRequest = startSessionRequest;
@@ -34,11 +43,39 @@ public class TestSession {
     }
 
     public ResponseEntity<byte[]> forwardRegularRequest(RegularSessionRequest sessionRequest) throws IOException, HubSessionException {
-        return forwardRequest(sessionRequest);
+        try {
+            forwardingRequest = true;
+            return forwardRequest(sessionRequest);
+        } finally {
+            forwardingRequest = false;
+        }
+
     }
 
     public ResponseEntity<byte[]> forwardNewSessionRequest() throws IOException, HubSessionException {
-        return forwardRequest(startSessionRequest);
+        try {
+            forwardingRequest = true;
+            ResponseEntity<byte[]> res = forwardRequest(startSessionRequest);
+            started = true;
+            return res;
+        } finally {
+            forwardingRequest = false;
+        }
+    }
+
+    public void deleteSession() {
+        if (!started && !stopped) {
+            return;
+        }
+        RestTemplate restTemplate = remoteNode.getRestTemplate();
+        URL remoteURL = remoteNode.getConfiguration().getUrl();
+        String ok = remoteURL + "/session/" + sessionKey;
+        try {
+            String uri = new URL(remoteURL, ok).toExternalForm();
+            restTemplate.delete(uri);
+        } catch (Exception e) {
+            logger.error("Causing an error during session delete: {}", e.getMessage());
+        }
     }
 
     private ResponseEntity<byte[]> forwardRequest(WebDriverRequest webDriverRequest) throws IOException, HubSessionException {
@@ -151,5 +188,13 @@ public class TestSession {
 
     public Map<String, Object> getSessionData() {
         return sessionData;
+    }
+
+    public long getInactivityTime() {
+        return System.currentTimeMillis() - lastActivity;
+    }
+
+    public boolean isForwardingRequest() {
+        return forwardingRequest;
     }
 }

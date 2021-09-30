@@ -1,18 +1,20 @@
 package tr.com.cicerali.appiumhub;
 
+import tr.com.cicerali.appiumhub.exception.RequestParseException;
+
 import javax.servlet.http.HttpServletRequest;
 
 public class RegularSessionRequest extends WebDriverRequest {
 
     private final String sessionKey;
 
-    public RegularSessionRequest(HttpServletRequest request, String sessionKey) throws HubSessionException {
+    public RegularSessionRequest(HttpServletRequest request, String sessionKey) throws RequestParseException {
         super(request);
         this.requestType = RequestType.REGULAR;
         this.sessionKey = sessionKey;
     }
 
-    public RegularSessionRequest(HttpServletRequest request, String sessionKey, RequestType requestType) throws HubSessionException {
+    public RegularSessionRequest(HttpServletRequest request, String sessionKey, RequestType requestType) throws RequestParseException {
         this(request, sessionKey);
         this.requestType = requestType;
     }

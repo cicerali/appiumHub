@@ -4,6 +4,8 @@ package tr.com.cicerali.appiumhub;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import tr.com.cicerali.appiumhub.exception.HubRegisterException;
+import tr.com.cicerali.appiumhub.exception.HubSessionException;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
@@ -51,5 +53,10 @@ public class HubController {
     @DeleteMapping("/wd/hub/session/{sessionKey}")
     public ResponseEntity<byte[]> delete(HttpServletRequest request, @PathVariable("sessionKey") String sessionKey) throws HubSessionException {
         return hubCore.processDeleteSession(request, sessionKey);
+    }
+
+    @DeleteMapping("/wd/hub/session")
+    public void delete() {
+        /* make appium desktop happy */
     }
 }

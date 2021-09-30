@@ -1,13 +1,13 @@
 package tr.com.cicerali.appiumhub;
 
-import org.apache.commons.lang3.StringUtils;
-
 import java.util.Optional;
+
+import static tr.com.cicerali.appiumhub.Constants.*;
 
 public class HubConfig {
 
     public final String pathPrefix;
-    public final boolean throwOnProxyError;
+    public final boolean stopOnProxyError;
     public final int browserTimeout;
     public final int newSessionWaitTimeout;
     public final int cleanUpCycle;
@@ -17,21 +17,23 @@ public class HubConfig {
     public final int unregisterIfStillDownAfter;
     public final int nodeStatusCheckTimeout;
     public final boolean throwOnCapabilityNotPresent;
+    public final CapabilityMatcher capabilityMatcher;
 
-    public static final CapabilityMatcher capabilityMatcher = (currentCapability, requestedCapability) -> true;
+    public static final CapabilityMatcher testMatcher = (currentCapability, requestedCapability) -> true;
 
     public HubConfig(HubProperties hubProperties) {
 
-        this.pathPrefix = Optional.ofNullable(hubProperties.getPathPrefix()).orElse(StringUtils.EMPTY);
-        this.throwOnProxyError = Optional.ofNullable(hubProperties.getThrowOnProxyError()).orElse(true);
-        this.browserTimeout = Optional.ofNullable(hubProperties.getBrowserTimeout()).orElse(0);
-        this.newSessionWaitTimeout = Optional.ofNullable(hubProperties.getNewSessionWaitTimeout()).orElse(-1);
-        this.cleanUpCycle = Optional.ofNullable(hubProperties.getCleanUpCycle()).orElse(5000);
-        this.timeout = Optional.ofNullable(hubProperties.getTimeout()).orElse(1800);
-        this.nodePolling = Optional.ofNullable(hubProperties.getNodePolling()).orElse(5000);
-        this.downPollingLimit = Optional.ofNullable(hubProperties.getDownPollingLimit()).orElse(2);
-        this.unregisterIfStillDownAfter = Optional.ofNullable(hubProperties.getUnregisterIfStillDownAfter()).orElse(60000);
-        this.nodeStatusCheckTimeout = Optional.ofNullable(hubProperties.getNodeStatusCheckTimeout()).orElse(5000);
-        this.throwOnCapabilityNotPresent = Optional.ofNullable(hubProperties.getThrowOnCapabilityNotPresent()).orElse(true);
+        this.pathPrefix = Optional.ofNullable(hubProperties.getPathPrefix()).orElse(DEFAULT_PATH_PREFIX);
+        this.stopOnProxyError = Optional.ofNullable(hubProperties.getStopOnProxyError()).orElse(DEFAULT_STOP_ON_PROXY_ERROR);
+        this.browserTimeout = Optional.ofNullable(hubProperties.getBrowserTimeout()).orElse(DEFAULT_BROWSER_TIMEOUT);
+        this.newSessionWaitTimeout = Optional.ofNullable(hubProperties.getNewSessionWaitTimeout()).orElse(DEFAULT_NEW_SESSION_WAIT_TIMEOUT);
+        this.cleanUpCycle = Optional.ofNullable(hubProperties.getCleanUpCycle()).orElse(DEFAULT_CLEAN_UP_CYCLE_INTERVAL);
+        this.timeout = Optional.ofNullable(hubProperties.getTimeout()).orElse(DEFAULT_SESSION_TIMEOUT);
+        this.nodePolling = Optional.ofNullable(hubProperties.getNodePolling()).orElse(DEFAULT_POLLING_INTERVAL);
+        this.downPollingLimit = Optional.ofNullable(hubProperties.getDownPollingLimit()).orElse(DEFAULT_DOWN_POLLING_LIMIT);
+        this.unregisterIfStillDownAfter = Optional.ofNullable(hubProperties.getUnregisterIfStillDownAfter()).orElse(DEFAULT_UNREGISTER_DELAY);
+        this.nodeStatusCheckTimeout = Optional.ofNullable(hubProperties.getNodeStatusCheckTimeout()).orElse(DEFAULT_NODE_STATUS_CHECK_TIMEOUT);
+        this.throwOnCapabilityNotPresent = Optional.ofNullable(hubProperties.getThrowOnCapabilityNotPresent()).orElse(DEFAULT_THROW_ON_CAPABILITY_NOT_PRESENT);
+        this.capabilityMatcher = new DefaultCapabilityMatcher(true);
     }
 }
