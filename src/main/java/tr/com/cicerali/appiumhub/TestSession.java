@@ -21,6 +21,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.util.*;
+import java.util.function.Predicate;
 
 public class TestSession {
 
@@ -30,16 +31,18 @@ public class TestSession {
     private volatile long lastActivity;
     private final StartSessionRequest startSessionRequest;
     private final RemoteNode remoteNode;
+    private boolean keepAuthorizationHeaders;
     private String sessionKey;
     private final Map<String, Object> sessionData = new LinkedHashMap<>();
     private volatile boolean stopped = false;
     private boolean forwardingRequest = false;
     private boolean started = false;
 
-    public TestSession(StartSessionRequest startSessionRequest, RemoteNode remoteNode) {
+    public TestSession(StartSessionRequest startSessionRequest, RemoteNode remoteNode, boolean keepAuthorizationHeaders) {
         this.startSessionRequest = startSessionRequest;
         this.remoteNode = remoteNode;
         this.lastActivity = System.currentTimeMillis();
+        this.keepAuthorizationHeaders = keepAuthorizationHeaders;
     }
 
     public ResponseEntity<byte[]> forwardRegularRequest(RegularSessionRequest sessionRequest) throws IOException, HubSessionException {
@@ -64,7 +67,7 @@ public class TestSession {
     }
 
     public void deleteSession() {
-        if (!started && !stopped) {
+        if (!started || stopped) {
             return;
         }
         RestTemplate restTemplate = remoteNode.getRestTemplate();
@@ -77,6 +80,17 @@ public class TestSession {
             logger.error("Causing an error during session delete: {}", e.getMessage());
         }
     }
+
+    Predicate<String> shouldRemoveHeader = s -> {
+        if ("Content-Length".equalsIgnoreCase(s)) {
+            return true; // already will set
+        }
+        if (keepAuthorizationHeaders) {
+            return false;
+        } else {
+            return "Authorization".equalsIgnoreCase(s) || "Proxy-Authorization".equalsIgnoreCase(s);
+        }
+    };
 
     private ResponseEntity<byte[]> forwardRequest(WebDriverRequest webDriverRequest) throws IOException, HubSessionException {
 
@@ -96,8 +110,8 @@ public class TestSession {
 
         for (Enumeration<String> e = webDriverRequest.getHeaderNames(); e.hasMoreElements(); ) {
             String headerName = e.nextElement();
-            if ("Content-Length".equalsIgnoreCase(headerName)) {
-                continue; // already set
+            if (shouldRemoveHeader.test(headerName)) {
+                continue;
             }
             headers.add(headerName, webDriverRequest.getHeader(headerName));
         }
@@ -127,9 +141,12 @@ public class TestSession {
 
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode root = objectMapper.reader().readTree(body);
+            if (root.get("sessionId") == null) {
+                root = root.get("value");
+            }
             this.sessionKey = root.get("sessionId").textValue();
             this.sessionData.put("id", sessionKey);
-            this.sessionData.put("capabilities", objectMapper.convertValue(root.get("value"), new TypeReference<Map<String, Object>>() {
+            this.sessionData.put("capabilities", objectMapper.convertValue(root.get("capabilities"), new TypeReference<Map<String, Object>>() {
             }));
         }
     }

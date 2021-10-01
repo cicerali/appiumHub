@@ -2,6 +2,7 @@ package tr.com.cicerali.appiumhub;
 
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tr.com.cicerali.appiumhub.exception.HubRegisterException;
@@ -13,7 +14,7 @@ import java.util.Map;
 
 import static org.springframework.web.bind.annotation.RequestMethod.*;
 
-
+@ConditionalOnExpression("${appium-hub.enableController:true}")
 @RestController
 @RequestMapping("${appium-hub.pathPrefix:}")
 public class HubController {

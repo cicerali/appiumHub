@@ -5,6 +5,7 @@ public class Constants {
     }
 
     public static final String DEFAULT_PATH_PREFIX = "";
+    public static final boolean DEFAULT_KEEP_AUTHORIZATION_HEADERS = false;
     public static final boolean DEFAULT_STOP_ON_PROXY_ERROR = true;
     public static final int DEFAULT_BROWSER_TIMEOUT = 0;
     public static final int DEFAULT_NEW_SESSION_WAIT_TIMEOUT = 60000;

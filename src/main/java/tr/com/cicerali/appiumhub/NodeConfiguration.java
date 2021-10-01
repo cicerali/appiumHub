@@ -1,8 +1,6 @@
 package tr.com.cicerali.appiumhub;
 
 
-import org.springframework.beans.BeanUtils;
-
 import javax.validation.constraints.NotNull;
 import java.net.URL;
 
@@ -103,11 +101,19 @@ public class NodeConfiguration {
                 '}';
     }
 
-    NodeConfiguration(NodeConfiguration source) {
-        BeanUtils.copyProperties(source, this);
+    public NodeConfiguration(NodeConfiguration source) {
+        this.id = source.id;
+        this.cleanUpCycle = source.cleanUpCycle;
+        this.timeout = source.timeout;
+        this.browserTimeout = source.browserTimeout;
+        this.nodePolling = source.downPollingLimit;
+        this.nodeStatusCheckTimeout = source.nodeStatusCheckTimeout;
+        this.unregisterIfStillDownAfter = source.unregisterIfStillDownAfter;
+        this.downPollingLimit = source.downPollingLimit;
+        this.url = source.url;
     }
 
-    NodeConfiguration() {
+    public NodeConfiguration() {
 
     }
 }

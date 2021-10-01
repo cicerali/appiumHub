@@ -13,14 +13,20 @@ import org.apache.http.ssl.SSLContexts;
 import org.apache.http.ssl.TrustStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestTemplate;
 
 import javax.net.ssl.SSLContext;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.security.GeneralSecurityException;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -30,7 +36,7 @@ public class RemoteNode {
 
     private final RegistrationRequest registrationRequest;
     private final Map<String, Object> capabilities;
-    private NodeConfiguration configuration;
+    private final NodeConfiguration configuration;
     private final RestTemplate restTemplate;
 
     public final ReentrantLock lock = new ReentrantLock();
@@ -53,11 +59,22 @@ public class RemoteNode {
     public RemoteNode(RegistrationRequest registrationRequest, CapabilityMatcher capabilityMatcher, HubCore hubCore) throws GeneralSecurityException {
         this.registrationRequest = registrationRequest;
         this.capabilityMatcher = capabilityMatcher;
+        this.hubCore = hubCore;
+        this.capabilities = createDesiredCapabilities();
+        this.configuration = createConfiguration();
+        this.restTemplate = createRestTemplate();
+        this.id = configuration.getId();
+        this.nodeControl = new NodeControl();
+    }
+
+    private Map<String, Object> createDesiredCapabilities() {
         Map<String, Object> mergedCaps = new HashMap<>();
         registrationRequest.getCapabilities().forEach(mergedCaps::putAll);
-        this.capabilities = mergedCaps;
-        this.hubCore = hubCore;
-        setConfiguration();
+        return mergedCaps;
+    }
+
+    private RestTemplate createRestTemplate() throws NoSuchAlgorithmException, KeyStoreException, KeyManagementException {
+
         int timeout = configuration.getBrowserTimeout();
         RequestConfig config = RequestConfig.custom()
                 .setConnectTimeout(timeout * 1000)
@@ -65,60 +82,68 @@ public class RemoteNode {
                 .setSocketTimeout(timeout * 1000).build();
 
         HttpClient httpClient;
+        HttpComponentsClientHttpRequestFactory requestFactory =
+                new HttpComponentsClientHttpRequestFactory();
         if (registrationRequest.getConfiguration().getUrl().getProtocol().equals("https")) {
             TrustStrategy acceptingTrustStrategy = (cert, authType) -> true;
             SSLContext sslContext = SSLContexts.custom().loadTrustMaterial(null, acceptingTrustStrategy).build();
             SSLConnectionSocketFactory scsf = new SSLConnectionSocketFactory(sslContext,
                     NoopHostnameVerifier.INSTANCE);
             httpClient = HttpClientBuilder.create().setSSLSocketFactory(scsf).setDefaultRequestConfig(config).build();
-            HttpComponentsClientHttpRequestFactory requestFactory =
-                    new HttpComponentsClientHttpRequestFactory();
-            requestFactory.setHttpClient(httpClient);
-            this.restTemplate = new RestTemplate(requestFactory);
+
         } else {
             httpClient = HttpClientBuilder.create().setDefaultRequestConfig(config).build();
-            HttpComponentsClientHttpRequestFactory requestFactory =
-                    new HttpComponentsClientHttpRequestFactory();
-            requestFactory.setHttpClient(httpClient);
-            this.restTemplate = new RestTemplate(requestFactory);
         }
-        this.id = configuration.getId();
-        this.nodeControl = new NodeControl();
+        requestFactory.setHttpClient(httpClient);
+
+        RestTemplate template = new RestTemplate(requestFactory);
+        List<ClientHttpRequestInterceptor> interceptors = template.getInterceptors();
+        List<ClientHttpRequestInterceptor> fromHub = hubCore.getHubConfig().getInterceptors();
+        if (!CollectionUtils.isEmpty(fromHub)) {
+            if (CollectionUtils.isEmpty(interceptors)) {
+                restTemplate.setInterceptors(fromHub);
+            } else {
+                interceptors.addAll(fromHub);
+            }
+        }
+
+        return new RestTemplate(requestFactory);
     }
 
-    private void setConfiguration() {
+    private NodeConfiguration createConfiguration() {
 
-        this.configuration = new NodeConfiguration(registrationRequest.getConfiguration());
-        if (configuration.getId() == null) {
-            configuration.setId(configuration.getUrl().toString());
+        NodeConfiguration conf = new NodeConfiguration(registrationRequest.getConfiguration());
+        if (conf.getId() == null) {
+            conf.setId(conf.getUrl().toString());
         }
-        if (configuration.getCleanUpCycle() == null) {
-            configuration.setCleanUpCycle(hubCore.getHubConfig().cleanUpCycle);
-        }
-
-        if (configuration.getTimeout() == null) {
-            configuration.setTimeout(hubCore.getHubConfig().timeout);
+        if (conf.getCleanUpCycle() == null) {
+            conf.setCleanUpCycle(hubCore.getHubConfig().cleanUpCycle);
         }
 
-        if (configuration.getBrowserTimeout() == null) {
-            configuration.setBrowserTimeout(hubCore.getHubConfig().browserTimeout);
+        if (conf.getTimeout() == null) {
+            conf.setTimeout(hubCore.getHubConfig().timeout);
         }
 
-        if (configuration.getNodePolling() == null) {
-            configuration.setNodePolling(hubCore.getHubConfig().nodePolling);
+        if (conf.getBrowserTimeout() == null) {
+            conf.setBrowserTimeout(hubCore.getHubConfig().browserTimeout);
         }
 
-        if (configuration.getNodeStatusCheckTimeout() == null) {
-            configuration.setNodeStatusCheckTimeout(hubCore.getHubConfig().nodeStatusCheckTimeout);
+        if (conf.getNodePolling() == null) {
+            conf.setNodePolling(hubCore.getHubConfig().nodePolling);
         }
 
-        if (configuration.getUnregisterIfStillDownAfter() == null) {
-            configuration.setUnregisterIfStillDownAfter(hubCore.getHubConfig().unregisterIfStillDownAfter);
+        if (conf.getNodeStatusCheckTimeout() == null) {
+            conf.setNodeStatusCheckTimeout(hubCore.getHubConfig().nodeStatusCheckTimeout);
         }
 
-        if (configuration.getDownPollingLimit() == null) {
-            configuration.setDownPollingLimit(hubCore.getHubConfig().downPollingLimit);
+        if (conf.getUnregisterIfStillDownAfter() == null) {
+            conf.setUnregisterIfStillDownAfter(hubCore.getHubConfig().unregisterIfStillDownAfter);
         }
+
+        if (conf.getDownPollingLimit() == null) {
+            conf.setDownPollingLimit(hubCore.getHubConfig().downPollingLimit);
+        }
+        return conf;
     }
 
     public RegistrationRequest getOriginalRegistrationRequest() {

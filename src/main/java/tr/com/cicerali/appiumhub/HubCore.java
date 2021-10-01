@@ -36,7 +36,7 @@ public class HubCore {
     public Map<String, Object> getNodeStatus(String id) {
         RemoteNode remoteNode = getNodeById(id);
         if (remoteNode == null) {
-            throw new NodeNotFoundException("Cannot find node with ID =" + id + " in the hub.");
+            throw new NodeNotFoundException("Cannot find node with id: " + id);
         }
         Map<String, Object> res = new LinkedHashMap<>();
         res.put("id", id);
@@ -208,7 +208,7 @@ public class HubCore {
         if (remoteNode == null) {
             throw new SessionCreateException("Create session timeout");
         }
-        TestSession testSession = new TestSession(sessionRequest, remoteNode);
+        TestSession testSession = new TestSession(sessionRequest, remoteNode, hubConfig.keepAuthorizationHeaders);
         remoteNode.setBusy(true);
         remoteNode.setTestSession(testSession);
         remoteNode.lock.unlock();
@@ -242,11 +242,11 @@ public class HubCore {
             return;
         }
         if (remoteNodes.isEmpty()) {
-            throw new CapabilityNotFoundException("Empty grid " + desiredCapabilities);
+            throw new CapabilityNotFoundException("Empty hub, not possible to continue");
         }
 
         if (!hasCapability(desiredCapabilities)) {
-            throw new CapabilityNotFoundException("Can not find capability: " + desiredCapabilities);
+            throw new CapabilityNotFoundException("Hub can not find capability: " + desiredCapabilities);
         }
     }
 

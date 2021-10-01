@@ -6,14 +6,24 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class HubProperties {
 
     /**
-     * Path prefix for hub endpoints
+     * <String> : Path prefix for hub endpoints
+     * Default: "/"
      */
     private String pathPrefix;
+
+    /**
+     * <Boolean> true or false: If true, hub will keep client's authorization headers
+     * (Authorization or Proxy-Authorization) during forwarding requests. If set to false,
+     * hub will remove these headers.
+     * Default: true
+     */
+    private Boolean keepAuthorizationHeaders;
 
     /**
      * <Boolean> true or false : If true, hub will terminate session if any proxy error
      * occurs. If set to false, the session will remain open until it is stopped by the
      * client, or it times out.
+     * Default: true
      */
     private Boolean stopOnProxyError;
 
@@ -98,6 +108,14 @@ public class HubProperties {
 
     public void setPathPrefix(String pathPrefix) {
         this.pathPrefix = pathPrefix;
+    }
+
+    public Boolean getKeepAuthorizationHeaders() {
+        return keepAuthorizationHeaders;
+    }
+
+    public void setKeepAuthorizationHeaders(Boolean keepAuthorizationHeaders) {
+        this.keepAuthorizationHeaders = keepAuthorizationHeaders;
     }
 
     public Boolean getStopOnProxyError() {
