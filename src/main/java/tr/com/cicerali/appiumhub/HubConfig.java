@@ -24,10 +24,15 @@ public class HubConfig {
     public final boolean throwOnCapabilityNotPresent;
     public final CapabilityMatcher capabilityMatcher;
     private final List<ClientHttpRequestInterceptor> interceptors = new ArrayList<>();
+    private TestSessionInterceptor testSessionInterceptor;
 
     public static final CapabilityMatcher testMatcher = (currentCapability, requestedCapability) -> true;
 
     public HubConfig(HubProperties hubProperties) {
+        this(hubProperties, new DefaultCapabilityMatcher(true));
+    }
+
+    public HubConfig(HubProperties hubProperties, CapabilityMatcher capabilityMatcher) {
 
         this.pathPrefix = Optional.ofNullable(hubProperties.getPathPrefix()).orElse(DEFAULT_PATH_PREFIX);
         this.keepAuthorizationHeaders = Optional.ofNullable(hubProperties.getKeepAuthorizationHeaders()).orElse(DEFAULT_KEEP_AUTHORIZATION_HEADERS);
@@ -41,7 +46,7 @@ public class HubConfig {
         this.unregisterIfStillDownAfter = Optional.ofNullable(hubProperties.getUnregisterIfStillDownAfter()).orElse(DEFAULT_UNREGISTER_DELAY);
         this.nodeStatusCheckTimeout = Optional.ofNullable(hubProperties.getNodeStatusCheckTimeout()).orElse(DEFAULT_NODE_STATUS_CHECK_TIMEOUT);
         this.throwOnCapabilityNotPresent = Optional.ofNullable(hubProperties.getThrowOnCapabilityNotPresent()).orElse(DEFAULT_THROW_ON_CAPABILITY_NOT_PRESENT);
-        this.capabilityMatcher = new DefaultCapabilityMatcher(true);
+        this.capabilityMatcher = capabilityMatcher;
     }
 
     public List<ClientHttpRequestInterceptor> getInterceptors() {
@@ -50,5 +55,17 @@ public class HubConfig {
 
     public void addInterceptor(ClientHttpRequestInterceptor interceptor) {
         interceptors.add(interceptor);
+    }
+
+    public void setTestSessionInterceptor(TestSessionInterceptor testSessionInterceptor) {
+        this.testSessionInterceptor = testSessionInterceptor;
+    }
+
+    public TestSessionInterceptor getTestSessionInterceptor() {
+        if (testSessionInterceptor == null) {
+            return new TestSessionInterceptor() {
+            };
+        }
+        return testSessionInterceptor;
     }
 }

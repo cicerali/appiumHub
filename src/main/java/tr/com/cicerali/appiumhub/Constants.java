@@ -10,7 +10,7 @@ public class Constants {
     public static final int DEFAULT_BROWSER_TIMEOUT = 0;
     public static final int DEFAULT_NEW_SESSION_WAIT_TIMEOUT = 60000;
     public static final int DEFAULT_CLEAN_UP_CYCLE_INTERVAL = 5000;
-    public static final int DEFAULT_SESSION_TIMEOUT = 1800;
+    public static final int DEFAULT_SESSION_TIMEOUT = 300;
     public static final int DEFAULT_POLLING_INTERVAL = 5000;
     public static final int DEFAULT_DOWN_POLLING_LIMIT = 2;
     public static final int DEFAULT_UNREGISTER_DELAY = 60000;

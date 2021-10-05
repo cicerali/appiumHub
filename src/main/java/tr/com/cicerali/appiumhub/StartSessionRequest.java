@@ -24,7 +24,7 @@ public class StartSessionRequest extends WebDriverRequest {
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode root;
         try {
-            root = objectMapper.reader().readTree(body);
+            root = objectMapper.reader().readTree(new String(body));
         } catch (IOException e) {
             throw new RequestParseException("Could not parse request", e);
         }

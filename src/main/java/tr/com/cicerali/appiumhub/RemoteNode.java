@@ -101,13 +101,13 @@ public class RemoteNode {
         List<ClientHttpRequestInterceptor> fromHub = hubCore.getHubConfig().getInterceptors();
         if (!CollectionUtils.isEmpty(fromHub)) {
             if (CollectionUtils.isEmpty(interceptors)) {
-                restTemplate.setInterceptors(fromHub);
+                template.setInterceptors(fromHub);
             } else {
                 interceptors.addAll(fromHub);
             }
         }
 
-        return new RestTemplate(requestFactory);
+        return template;
     }
 
     private NodeConfiguration createConfiguration() {
@@ -152,6 +152,10 @@ public class RemoteNode {
 
     public boolean hasCapability(Map<String, Object> requestedCapability) {
         return capabilityMatcher.matches(capabilities, requestedCapability);
+    }
+
+    public URL getRemoteHost() {
+        return configuration.getUrl();
     }
 
     public double getResourceUsageInPercent() {

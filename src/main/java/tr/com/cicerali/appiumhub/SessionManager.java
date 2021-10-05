@@ -1,9 +1,8 @@
 package tr.com.cicerali.appiumhub;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
+import com.google.common.collect.ImmutableSet;
+
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -39,7 +38,11 @@ public class SessionManager {
         activeTestSessions.put(testSession.getSessionKey(), testSession);
     }
 
-    public SessionData getAllSessions() {
+    public Set<TestSession> getActiveTestSessions() {
+        return ImmutableSet.copyOf(activeTestSessions.values());
+    }
+
+    public SessionData getAllSessionData() {
 
         List<Map<String, Object>> ref = new ArrayList<>();
         activeTestSessions.forEach((k, v) -> ref.add(v.getSessionData()));

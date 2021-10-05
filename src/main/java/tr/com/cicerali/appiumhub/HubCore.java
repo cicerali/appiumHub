@@ -1,5 +1,6 @@
 package tr.com.cicerali.appiumhub;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.math.DoubleMath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 public class HubCore {
 
@@ -21,12 +23,14 @@ public class HubCore {
     private final Map<String, RemoteNode> remoteNodes = new ConcurrentHashMap<>();
     private final SessionManager sessionManager = new SessionManager();
     private final HubConfig hubConfig;
+    public final TestSessionInterceptor testSessionInterceptor;
 
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition nodeAvailable = lock.newCondition();
 
     public HubCore(HubConfig hubConfig) {
         this.hubConfig = hubConfig;
+        this.testSessionInterceptor = hubConfig.getTestSessionInterceptor();
     }
 
     public RemoteNode getNodeById(String id) {
@@ -66,7 +70,7 @@ public class HubCore {
     }
 
     public SessionData processGetSessions() {
-        return sessionManager.getAllSessions();
+        return sessionManager.getAllSessionData();
     }
 
     public ResponseEntity<byte[]> processRegularSession(HttpServletRequest request, String sessionKey) throws RequestParseException, SessionClosedException, SessionNotFoundException, ProxyForwardException, ProxyTimeoutException {
@@ -131,6 +135,7 @@ public class HubCore {
     public void cleanSession(TestSession testSession, SessionTerminationReason reason) {
         sessionManager.removeSession(testSession, reason);
         testSession.getRemoteNode().clean();
+        testSessionInterceptor.afterTestSessionTerminate(testSession, reason);
     }
 
     public void wakeUpWaiters() {
@@ -148,7 +153,7 @@ public class HubCore {
         if (testSession == null) {
             SessionTerminationReason reason = getTerminationReason(sessionKey);
             if (reason == null) {
-                throw new SessionNotFoundException("Session not found");
+                throw new SessionNotFoundException("Session not found: " + sessionKey);
             } else {
                 throw new SessionClosedException("Session " + sessionKey + " already closed, reason: " + reason);
             }
@@ -167,6 +172,7 @@ public class HubCore {
         /* will try to create session on a node or throw exception because of timeout */
         TestSession testSession = getNewSession(sessionRequest);
         try {
+            testSessionInterceptor.beforeTestSessionStart(testSession);
             ResponseEntity<byte[]> response = testSession.forwardNewSessionRequest();
             sessionManager.addSession(testSession);
             logger.info("Session started on node: {}, session: {}", testSession.getRemoteNode().getId(), logger.isDebugEnabled() ? "\n" + testSession.getSessionData() : testSession.getSessionKey());
@@ -256,5 +262,25 @@ public class HubCore {
 
     public HubConfig getHubConfig() {
         return hubConfig;
+    }
+
+    public void terminateTestSession(TestSession testSession) {
+        cleanSession(testSession, SessionTerminationReason.ORPHAN);
+    }
+
+    public List<RemoteNode> getAllNodes() {
+        return ImmutableList.copyOf(remoteNodes.values());
+    }
+
+    public List<RemoteNode> getAllReachableNodes() {
+        return remoteNodes.values().stream().filter(n -> !n.isDown()).collect(Collectors.toList());
+    }
+
+    public List<RemoteNode> getUsedNodes() {
+        return remoteNodes.values().stream().filter(RemoteNode::isBusy).collect(Collectors.toList());
+    }
+
+    public Set<TestSession> getActiveSessions() {
+        return sessionManager.getActiveTestSessions();
     }
 }

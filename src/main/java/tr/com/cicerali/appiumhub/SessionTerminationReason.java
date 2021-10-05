@@ -28,5 +28,9 @@ public enum SessionTerminationReason {
     /**
      * triggered for socket timeout
      */
-    SO_TIMEOUT
+    SO_TIMEOUT,
+    /**
+     * triggered externally by owner or someone else
+     */
+    ORPHAN
 }

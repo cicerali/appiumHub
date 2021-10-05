@@ -36,7 +36,7 @@ public class TestSession {
     private final Map<String, Object> sessionData = new LinkedHashMap<>();
     private volatile boolean stopped = false;
     private boolean forwardingRequest = false;
-    private boolean started = false;
+    protected boolean started = false;
 
     public TestSession(StartSessionRequest startSessionRequest, RemoteNode remoteNode, boolean keepAuthorizationHeaders) {
         this.startSessionRequest = startSessionRequest;
@@ -59,6 +59,11 @@ public class TestSession {
         try {
             forwardingRequest = true;
             ResponseEntity<byte[]> res = forwardRequest(startSessionRequest);
+            setSessionKey(res);
+            if (this.sessionKey == null) {
+                throw new SessionCreateException("webdriver new session JSON response body did not contain a session Id");
+            }
+            this.sessionCreatedAt = this.lastActivity;
             started = true;
             return res;
         } finally {
@@ -122,25 +127,16 @@ public class TestSession {
 
         this.lastActivity = System.currentTimeMillis();
         processResponseHeaders(webDriverRequest, remoteURL, responseEntity);
-
-        if (webDriverRequest.getRequestType() == RequestType.START_SESSION) {
-            setSessionKey(responseEntity);
-            if (this.sessionKey == null) {
-                throw new SessionCreateException("webdriver new session JSON response body did not contain a session Id");
-            }
-            this.sessionCreatedAt = this.lastActivity;
-        }
-
         return responseEntity;
     }
 
     private void setSessionKey(ResponseEntity<byte[]> responseEntity) throws IOException {
 
         byte[] body = responseEntity.getBody();
-        if (responseEntity.getStatusCodeValue() == HttpServletResponse.SC_OK) {
+        if (responseEntity.getStatusCodeValue() == HttpServletResponse.SC_OK && body != null) {
 
             ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode root = objectMapper.reader().readTree(body);
+            JsonNode root = objectMapper.reader().readTree(new String(body));
             if (root.get("sessionId") == null) {
                 root = root.get("value");
             }
@@ -156,14 +152,14 @@ public class TestSession {
             URL remoteURL,
             ResponseEntity<?> responseEntity) throws MalformedURLException {
         HttpHeaders httpHeaders = responseEntity.getHeaders();
-        List<String> encoding = httpHeaders.getOrEmpty(HttpHeaders.TRANSFER_ENCODING);
+        List<String> encoding = httpHeaders.getOrDefault(HttpHeaders.TRANSFER_ENCODING, Collections.emptyList());
         encoding.forEach(v -> {
             if (v.equalsIgnoreCase("chunked")) {
                 httpHeaders.remove(HttpHeaders.TRANSFER_ENCODING);
             }
         });
 
-        List<String> location = httpHeaders.getOrEmpty(HttpHeaders.LOCATION);
+        List<String> location = httpHeaders.getOrDefault(HttpHeaders.LOCATION, Collections.emptyList());
         if (!location.isEmpty()) {
             URL returnedLocation = new URL(remoteURL, location.get(0));
             String driverPath = remoteURL.getPath();
