@@ -154,7 +154,6 @@ public class HubCore {
             res = forwardRequest(testSession, sessionRequest);
         } finally {
             cleanSession(testSession, SessionTerminationReason.CLIENT_STOPPED_SESSION);
-            logger.info("Session({}) successfully deleted on node: {}", sessionKey, testSession.getRemoteNode().getId());
             wakeUpWaiters();
         }
         return res;
@@ -197,6 +196,7 @@ public class HubCore {
         sessionManager.removeSession(testSession, reason);
         testSession.getRemoteNode().clean();
         hubConfig.testSessionInterceptors.forEach(i -> i.afterTestSessionTerminate(testSession, reason));
+        logger.info("Session({}) successfully deleted on node: {}, reason: {}", testSession.getSessionKey(), testSession.getRemoteNode().getId(), reason);
     }
 
     /**
@@ -363,5 +363,12 @@ public class HubCore {
      */
     public int getActiveSessionCount() {
         return sessionManager.getActiveTestSessions().size();
+    }
+
+    /**
+     * @return active session set
+     */
+    public Set<TestSession> getActiveSessions() {
+        return sessionManager.getActiveTestSessions();
     }
 }

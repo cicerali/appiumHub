@@ -1,5 +1,6 @@
 package tr.com.cicerali.appiumhub;
 
+import com.fasterxml.jackson.annotation.JsonRawValue;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 
 import javax.validation.constraints.NotNull;
@@ -23,8 +24,11 @@ public class HubConfig {
     public final int unregisterIfStillDownAfter;
     public final int nodeStatusCheckTimeout;
     public final boolean throwOnCapabilityNotPresent;
+    @JsonRawValue
     public final CapabilityMatcher capabilityMatcher;
+    @JsonRawValue
     public final List<ClientHttpRequestInterceptor> httpRequestInterceptors;
+    @JsonRawValue
     public final List<TestSessionInterceptor> testSessionInterceptors;
 
     public static final CapabilityMatcher testMatcher = (currentCapability, requestedCapability) -> true;

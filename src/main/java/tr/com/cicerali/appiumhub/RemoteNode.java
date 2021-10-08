@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
+import javax.annotation.Nullable;
 import javax.net.ssl.SSLContext;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -215,6 +216,7 @@ public class RemoteNode {
         return configuration;
     }
 
+    @Nullable
     public TestSession getTestSession() {
         return this.testSession;
     }
