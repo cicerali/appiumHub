@@ -1,0 +1,82 @@
+{
+  "properties": [
+    {
+      "name": "appium-hub.path-prefix",
+      "type": "java.lang.String",
+      "description": "Path prefix for hub endpoints.",
+      "defaultValue": "/"
+    },
+    {
+      "name": "appium-hub.keep-authorization-headers",
+      "type": "java.lang.Boolean",
+      "description": "Whether to keep Authorization headers.",
+      "defaultValue": false
+    },
+    {
+      "name": "appium-hub.stop-on-proxy-error",
+      "type": "java.lang.Boolean",
+      "description": "Whether to terminate session if any error.",
+      "defaultValue": true
+    },
+    {
+      "name": "appium-hub.browser-timeout",
+      "type": "java.lang.Integer",
+      "description": "Session command timeout, as a second.",
+      "defaultValue": 0
+    },
+    {
+      "name": "appium-hub.new-session-wait-timeout",
+      "type": "java.lang.Integer",
+      "description": "Timeout for waiting free node for new session create, as a ms",
+      "defaultValue": 60000
+    },
+    {
+      "name": "appium-hub.clean-up-cycle",
+      "type": "java.lang.Integer",
+      "description": "Node check time for determine session idle, as a ms",
+      "defaultValue": 5000
+    },
+    {
+      "name": "appium-hub.timeout",
+      "type": "java.lang.Integer",
+      "description": "Idle session timeout, as a second.",
+      "defaultValue": 300
+    },
+    {
+      "name": "appium-hub.node-polling",
+      "type": "java.lang.Integer",
+      "description": "Node check time for determine node reachability, as a ms.",
+      "defaultValue": 5000
+    },
+    {
+      "name": "appium-hub.down-polling-limit",
+      "type": "java.lang.Integer",
+      "description": "Node check count for mark node unreachable.",
+      "defaultValue": 2
+    },
+    {
+      "name": "appium-hub.unregister-if-still-down-after",
+      "type": "java.lang.Integer",
+      "description": "Timeout for unregister unreachable nodes, as a ms.",
+      "defaultValue": 60000
+    },
+    {
+      "name": "appium-hub.node-status-check-timeout",
+      "type": "java.lang.Integer",
+      "description": "Socket timeout for node polling, as a ms.",
+      "defaultValue": 5000
+    },
+    {
+      "name": "appium-hub.throw-on-capability-not-present",
+      "type": "java.lang.Boolean",
+      "description": "Whether to throw exception if capability not match.",
+      "defaultValue": true
+    },
+    {
+      "name": "appium-hub.enable-controller",
+      "type": "java.lang.String",
+      "description": "Whether to enable appium hub controller.",
+      "defaultValue": true
+    }
+  ]
+}

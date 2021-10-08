@@ -15,7 +15,7 @@ public class HubProperties {
      * <Boolean> true or false: If true, hub will keep client's authorization headers
      * (Authorization or Proxy-Authorization) during forwarding requests. If set to false,
      * hub will remove these headers.
-     * Default: true
+     * Default: false
      */
     private Boolean keepAuthorizationHeaders;
 
@@ -62,7 +62,7 @@ public class HubProperties {
      * The test slot will then be released for another test to use. This is typically
      * used to take care of client crashes. Must also specify "cleanUpCycle" option.
      * Also known as "sessionTimeout"
-     * Default: 1800
+     * Default: 300
      */
     private Integer timeout;
 

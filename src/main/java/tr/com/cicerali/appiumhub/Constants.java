@@ -4,7 +4,8 @@ public class Constants {
     private Constants() {
     }
 
-    public static final String DEFAULT_PATH_PREFIX = "";
+    public static final String DEFAULT_PATH_PREFIX = "/";
+    public static final String DEFAULT_BASE_PATH = "wd/hub";
     public static final boolean DEFAULT_KEEP_AUTHORIZATION_HEADERS = false;
     public static final boolean DEFAULT_STOP_ON_PROXY_ERROR = true;
     public static final int DEFAULT_BROWSER_TIMEOUT = 0;

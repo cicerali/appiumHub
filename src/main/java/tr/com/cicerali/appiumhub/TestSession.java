@@ -23,45 +23,67 @@ import java.net.URL;
 import java.util.*;
 import java.util.function.Predicate;
 
+/**
+ * Specifies a test session triggered by an appium test client.
+ * Constructed with new session request and live until delete session request
+ * or when inactivity timeout expired.
+ * It forwards all client request to remote node.
+ */
 public class TestSession {
 
     private static final Logger logger = LoggerFactory.getLogger(TestSession.class);
 
+    private final CreateSessionRequest createSessionRequest;
+    private final RemoteNode remoteNode;
+    private final Map<String, Object> sessionData = new LinkedHashMap<>();
+    private final Predicate<String> shouldRemoveHeader;
+
     private volatile long sessionCreatedAt;
     private volatile long lastActivity;
-    private final StartSessionRequest startSessionRequest;
-    private final RemoteNode remoteNode;
-    private boolean keepAuthorizationHeaders;
     private String sessionKey;
-    private final Map<String, Object> sessionData = new LinkedHashMap<>();
     private volatile boolean stopped = false;
-    private boolean forwardingRequest = false;
-    protected boolean started = false;
+    private volatile boolean forwardingRequest = false;
+    private volatile boolean started = false;
 
-    public TestSession(StartSessionRequest startSessionRequest, RemoteNode remoteNode, boolean keepAuthorizationHeaders) {
-        this.startSessionRequest = startSessionRequest;
+    /**
+     * @param createSessionRequest     new session request
+     * @param remoteNode               remote node which requests will be forwarded
+     * @param keepAuthorizationHeaders {@code true} clients' authorization headers will be kept in requests
+     */
+    public TestSession(CreateSessionRequest createSessionRequest, RemoteNode remoteNode, boolean keepAuthorizationHeaders) {
+        this.createSessionRequest = createSessionRequest;
         this.remoteNode = remoteNode;
         this.lastActivity = System.currentTimeMillis();
-        this.keepAuthorizationHeaders = keepAuthorizationHeaders;
+        this.shouldRemoveHeader = s -> "Content-Length".equalsIgnoreCase(s) ||
+                (!keepAuthorizationHeaders && ("Authorization".equalsIgnoreCase(s) || "Proxy-Authorization".equalsIgnoreCase(s)));
     }
 
-    public ResponseEntity<byte[]> forwardRegularRequest(RegularSessionRequest sessionRequest) throws IOException, HubSessionException {
+    /**
+     * @param sessionRequest session related regular request
+     * @return remote node response
+     * @throws IOException if proxying fail
+     */
+    public ResponseEntity<byte[]> forwardRegularRequest(RegularSessionRequest sessionRequest) throws IOException {
         try {
             forwardingRequest = true;
             return forwardRequest(sessionRequest);
         } finally {
             forwardingRequest = false;
         }
-
     }
 
+    /**
+     * @return new session response from remote node
+     * @throws IOException         if proxying fail
+     * @throws HubSessionException if response not as expected
+     */
     public ResponseEntity<byte[]> forwardNewSessionRequest() throws IOException, HubSessionException {
         try {
             forwardingRequest = true;
-            ResponseEntity<byte[]> res = forwardRequest(startSessionRequest);
+            ResponseEntity<byte[]> res = forwardRequest(createSessionRequest);
             setSessionKey(res);
             if (this.sessionKey == null) {
-                throw new SessionCreateException("webdriver new session JSON response body did not contain a session Id");
+                throw new SessionCreateException("Proxy response does not contain session id");
             }
             this.sessionCreatedAt = this.lastActivity;
             started = true;
@@ -71,6 +93,9 @@ public class TestSession {
         }
     }
 
+    /**
+     * deletes the session on the remote node, if any
+     */
     public void deleteSession() {
         if (!started || stopped) {
             return;
@@ -86,18 +111,7 @@ public class TestSession {
         }
     }
 
-    Predicate<String> shouldRemoveHeader = s -> {
-        if ("Content-Length".equalsIgnoreCase(s)) {
-            return true; // already will set
-        }
-        if (keepAuthorizationHeaders) {
-            return false;
-        } else {
-            return "Authorization".equalsIgnoreCase(s) || "Proxy-Authorization".equalsIgnoreCase(s);
-        }
-    };
-
-    private ResponseEntity<byte[]> forwardRequest(WebDriverRequest webDriverRequest) throws IOException, HubSessionException {
+    private ResponseEntity<byte[]> forwardRequest(WebDriverRequest webDriverRequest) throws IOException {
 
         this.lastActivity = System.currentTimeMillis();
         RestTemplate restTemplate = remoteNode.getRestTemplate();
@@ -195,8 +209,8 @@ public class TestSession {
         this.stopped = stopped;
     }
 
-    public StartSessionRequest getStartSessionRequest() {
-        return startSessionRequest;
+    public CreateSessionRequest getStartSessionRequest() {
+        return createSessionRequest;
     }
 
     public Map<String, Object> getSessionData() {

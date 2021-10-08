@@ -23,22 +23,20 @@ public class HubCore {
     private final Map<String, RemoteNode> remoteNodes = new ConcurrentHashMap<>();
     private final SessionManager sessionManager = new SessionManager();
     private final HubConfig hubConfig;
-    public final TestSessionInterceptor testSessionInterceptor;
 
-    private final ReentrantLock lock = new ReentrantLock();
-    private final Condition nodeAvailable = lock.newCondition();
+    private final ReentrantLock coreLock = new ReentrantLock();
+    private final Condition nodeAvailable = coreLock.newCondition();
 
     public HubCore(HubConfig hubConfig) {
         this.hubConfig = hubConfig;
-        this.testSessionInterceptor = hubConfig.getTestSessionInterceptor();
     }
 
-    public RemoteNode getNodeById(String id) {
-        return remoteNodes.get(id);
-    }
-
+    /**
+     * @param id node id
+     * @return node status as a map
+     */
     public Map<String, Object> getNodeStatus(String id) {
-        RemoteNode remoteNode = getNodeById(id);
+        RemoteNode remoteNode = remoteNodes.get(id);
         if (remoteNode == null) {
             throw new NodeNotFoundException("Cannot find node with id: " + id);
         }
@@ -49,11 +47,19 @@ public class HubCore {
         return res;
     }
 
+    /**
+     * It will try to register remote node
+     *
+     * @param request registration request
+     * @throws HubRegisterException if registration fail
+     */
     public void register(RegistrationRequest request) throws HubRegisterException {
+
+        String id = request.getConfiguration().getId();
+        RemoteNode remoteNode = remoteNodes.get(id);
         try {
-            RemoteNode remoteNode = remoteNodes.get(request.getConfiguration().getId());
             if (remoteNode != null) {
-                remoteNode.destroy(SessionTerminationReason.NODE_REREGISTRATION);
+                remoteNode.tearDown(SessionTerminationReason.NODE_REREGISTRATION);
             }
 
             remoteNode = new RemoteNode(request, hubConfig.capabilityMatcher, this);
@@ -61,62 +67,111 @@ public class HubCore {
             logger.info("Node successfully registered: {}\nconfiguration: {}\ncapabilities: {}", remoteNode.getId(), remoteNode.getConfiguration(), remoteNode.getCapabilities());
             wakeUpWaiters();
         } catch (Exception e) {
-            throw new HubRegisterException(e);
+            throw new HubRegisterException("Failed to register node: " + id, e.getCause());
         }
     }
 
-    public void remove(RemoteNode remoteNode) {
-        remoteNodes.remove(remoteNode.getId());
+    /**
+     * It will process create new session request
+     *
+     * @param request session related http request
+     * @return proxy response
+     * @throws RequestParseException       if request parsing fail
+     * @throws InterruptedException        if interrupted
+     * @throws CapabilityNotFoundException if requested capabilities not found in pool
+     * @throws SessionCreateException      if session create fail
+     */
+    public ResponseEntity<byte[]> processStartSession(HttpServletRequest request) throws RequestParseException, InterruptedException, CapabilityNotFoundException, SessionCreateException {
+
+        CreateSessionRequest sessionRequest = new CreateSessionRequest(request);
+        logger.info("Trying to create new session with desired capabilities: {}", sessionRequest.getDesiredCapabilities());
+
+        /* checking if any node has capability to handle this request
+         * it is an initial check, if no matching it can throw an exception depending on configuration */
+        verifyDesiredCapabilities(sessionRequest.getDesiredCapabilities());
+
+        /* will try to create session on a node or throw exception because of timeout */
+        TestSession testSession = getNewSession(sessionRequest);
+        try {
+            hubConfig.testSessionInterceptors.forEach(i -> i.beforeTestSessionStart(testSession));
+            ResponseEntity<byte[]> response = testSession.forwardNewSessionRequest();
+            sessionManager.addSession(testSession);
+            logger.info("Session started on node: {}, session: {}", testSession.getRemoteNode().getId(), logger.isDebugEnabled() ? "\n" + testSession.getSessionData() : testSession.getSessionKey());
+            return response;
+        } catch (Exception e) {
+            cleanSession(testSession, SessionTerminationReason.CREATION_FAILED);
+            wakeUpWaiters();
+            throw new SessionCreateException(e);
+        }
     }
 
-    public SessionData processGetSessions() {
-        return sessionManager.getAllSessionData();
-    }
-
+    /**
+     * It will process all regular session requests which means session commands
+     *
+     * @param request    session related http request
+     * @param sessionKey session id
+     * @return proxy response
+     * @throws RequestParseException    if request parsing fail
+     * @throws SessionClosedException   if session already closed
+     * @throws SessionNotFoundException if the session is inactive or not in the history table
+     * @throws ProxyForwardException    if forwarding to remote node fail
+     * @throws ProxyTimeoutException    if forwarding to remote node timeout
+     */
     public ResponseEntity<byte[]> processRegularSession(HttpServletRequest request, String sessionKey) throws RequestParseException, SessionClosedException, SessionNotFoundException, ProxyForwardException, ProxyTimeoutException {
 
         RegularSessionRequest sessionRequest = new RegularSessionRequest(request, sessionKey);
         TestSession testSession = getSession(sessionRequest.getSessionKey());
         try {
             return forwardRequest(testSession, sessionRequest);
-        } catch (ProxyForwardException e) {
+        } catch (ProxyForwardException | ProxyTimeoutException e) {
             if (hubConfig.stopOnProxyError) {
-                cleanSession(testSession, SessionTerminationReason.FORWARDING_TO_NODE_FAILED);
-                wakeUpWaiters();
-            }
-            throw e;
-        } catch (ProxyTimeoutException e) {
-            if (hubConfig.stopOnProxyError) {
-                cleanSession(testSession, SessionTerminationReason.SO_TIMEOUT);
+                cleanSession(testSession, (e instanceof ProxyForwardException) ? SessionTerminationReason.FORWARDING_TO_NODE_FAILED : SessionTerminationReason.SO_TIMEOUT);
                 wakeUpWaiters();
             }
             throw e;
         }
     }
 
-    public ResponseEntity<byte[]> processDeleteSession(HttpServletRequest request, String sessionKey) throws RequestParseException, SessionClosedException, SessionNotFoundException {
+    /**
+     * It will process delete session request
+     *
+     * @param request    session related http request
+     * @param sessionKey session id
+     * @return proxy response
+     * @throws RequestParseException    if request parsing fail
+     * @throws SessionClosedException   if session already closed
+     * @throws SessionNotFoundException if the session is inactive or not in the history table
+     * @throws ProxyTimeoutException    if forwarding to remote node fail
+     * @throws ProxyForwardException    if forwarding to remote node timeout
+     */
+    public ResponseEntity<byte[]> processDeleteSession(HttpServletRequest request, String sessionKey) throws RequestParseException, SessionClosedException, SessionNotFoundException, ProxyTimeoutException, ProxyForwardException {
 
         RegularSessionRequest sessionRequest = new RegularSessionRequest(request, sessionKey, RequestType.DELETE_SESSION);
         TestSession testSession = getSession(sessionKey);
 
-        ResponseEntity<byte[]> res = null;
+        ResponseEntity<byte[]> res;
         try {
             res = forwardRequest(testSession, sessionRequest);
-        } catch (ProxyForwardException | ProxyTimeoutException e) {
-            logger.error("Proxying the request(method: {}, uri: {}) failed, reason: {}", sessionRequest.getMethod(), sessionRequest.getRequestURI(), e.getMessage());
+        } finally {
+            cleanSession(testSession, SessionTerminationReason.CLIENT_STOPPED_SESSION);
+            logger.info("Session({}) successfully deleted on node: {}", sessionKey, testSession.getRemoteNode().getId());
+            wakeUpWaiters();
         }
-
-        testSession.setStopped(true);
-        cleanSession(testSession, SessionTerminationReason.CLIENT_STOPPED_SESSION);
-        logger.info("Session({}) successfully deleted on node: {}", sessionKey, testSession.getRemoteNode().getId());
-        wakeUpWaiters();
         return res;
     }
 
-    public ResponseEntity<byte[]> processStartSession(HttpServletRequest request) throws HubSessionException, InterruptedException {
+    /**
+     * @param id node id
+     */
+    public void remove(String id) {
+        remoteNodes.remove(id);
+    }
 
-        StartSessionRequest sessionRequest = new StartSessionRequest(request);
-        return processNewSessionRequest(sessionRequest);
+    /**
+     * @return all session data
+     */
+    public SessionData processGetSessions() {
+        return sessionManager.getAllSessionData();
     }
 
     private ResponseEntity<byte[]> forwardRequest(TestSession testSession, RegularSessionRequest sessionRequest) throws ProxyForwardException, ProxyTimeoutException {
@@ -132,19 +187,32 @@ public class HubCore {
         }
     }
 
+    /**
+     * It will clean related node and will remove session from active sessions
+     *
+     * @param testSession test session
+     * @param reason      termination reason
+     */
     public void cleanSession(TestSession testSession, SessionTerminationReason reason) {
         sessionManager.removeSession(testSession, reason);
         testSession.getRemoteNode().clean();
-        testSessionInterceptor.afterTestSessionTerminate(testSession, reason);
+        hubConfig.testSessionInterceptors.forEach(i -> i.afterTestSessionTerminate(testSession, reason));
     }
 
+    /**
+     * Send signal to waiters which waiting free node
+     */
     public void wakeUpWaiters() {
-        lock.lock();
+        coreLock.lock();
         nodeAvailable.signalAll();
-        lock.unlock();
+        coreLock.unlock();
     }
 
-    private SessionTerminationReason getTerminationReason(String sessionKey) {
+    /**
+     * @param sessionKey session id
+     * @return termination reason
+     */
+    public SessionTerminationReason getTerminationReason(String sessionKey) {
         return sessionManager.getTerminationReason(sessionKey);
     }
 
@@ -161,68 +229,76 @@ public class HubCore {
         return testSession;
     }
 
-    private ResponseEntity<byte[]> processNewSessionRequest(StartSessionRequest sessionRequest) throws HubSessionException, InterruptedException {
+    private void verifyDesiredCapabilities(Map<String, Object> desiredCapabilities) throws CapabilityNotFoundException {
 
-        logger.info("Trying to create new session with desired capabilities: {}", sessionRequest.getDesiredCapabilities());
+        if (!hubConfig.throwOnCapabilityNotPresent) {
+            return;
+        }
+        if (remoteNodes.isEmpty()) {
+            throw new CapabilityNotFoundException("Empty hub, not possible to continue");
+        }
 
-        /* checking if any node has capability to handle this request
-         * it is an initial check, if no matching it can throw an exception depending on configuration */
-        verifyDesiredCapabilities(sessionRequest.getDesiredCapabilities());
-
-        /* will try to create session on a node or throw exception because of timeout */
-        TestSession testSession = getNewSession(sessionRequest);
-        try {
-            testSessionInterceptor.beforeTestSessionStart(testSession);
-            ResponseEntity<byte[]> response = testSession.forwardNewSessionRequest();
-            sessionManager.addSession(testSession);
-            logger.info("Session started on node: {}, session: {}", testSession.getRemoteNode().getId(), logger.isDebugEnabled() ? "\n" + testSession.getSessionData() : testSession.getSessionKey());
-            return response;
-        } catch (Exception e) {
-            cleanSession(testSession, SessionTerminationReason.CREATION_FAILED);
-            wakeUpWaiters();
-            throw new SessionCreateException(e);
+        if (!hasCapability(desiredCapabilities)) {
+            throw new CapabilityNotFoundException("Hub can not find capability: " + desiredCapabilities);
         }
     }
 
     @SuppressWarnings("java:S899")
-    public TestSession getNewSession(StartSessionRequest sessionRequest) throws HubSessionException, InterruptedException {
+    private TestSession getNewSession(CreateSessionRequest sessionRequest) throws SessionCreateException, InterruptedException {
+
         List<RemoteNode> sorted = getSorted();
         long begin = System.currentTimeMillis();
         long diff;
-        RemoteNode remoteNode;
+        Optional<RemoteNode> remoteNode;
 
         do {
-            remoteNode = sorted.stream().filter(n -> !n.isBusy() && !n.isDown()).filter(n -> n.lock.tryLock()).filter(n -> {
-                boolean ret = n.hasCapability(sessionRequest.getDesiredCapabilities());
-                if (!ret) {
-                    n.lock.unlock();
+            /* Sort nodes from less used to most
+             * Try to lock remote node because:
+             * only one request can access a node for new session create
+             * check the locked node if it has capability
+             */
+            remoteNode = sorted.stream().filter(n -> !n.isBusy() && !n.isDown()).filter(n -> n.accessLock.tryLock()).filter(n -> {
+                boolean matches = false;
+                try {
+                    matches = hubConfig.capabilityMatcher.matches(n.getCapabilities(), sessionRequest.getDesiredCapabilities());
+                } finally {
+                    if (!matches) {
+                        n.accessLock.unlock();
+                    }
                 }
-                return ret;
-            }).findFirst().orElse(null);
+                return matches;
+            }).findFirst();
 
             diff = System.currentTimeMillis() - begin;
-            if (remoteNode != null) {
+            if (remoteNode.isPresent()) {
                 break;
             }
 
-            lock.lock();
-            nodeAvailable.await(5, TimeUnit.SECONDS);
-            lock.unlock();
+            try {
+                coreLock.lock();
+                nodeAvailable.await(5, TimeUnit.SECONDS);
+            } finally {
+                coreLock.unlock();
+            }
 
         } while (diff <= hubConfig.newSessionWaitTimeout);
 
-        if (remoteNode == null) {
+        if (!remoteNode.isPresent()) {
             throw new SessionCreateException("Create session timeout");
         }
-        TestSession testSession = new TestSession(sessionRequest, remoteNode, hubConfig.keepAuthorizationHeaders);
-        remoteNode.setBusy(true);
-        remoteNode.setTestSession(testSession);
-        remoteNode.lock.unlock();
-        logger.debug("Found a node for new session: {}", remoteNode.getId());
-        return testSession;
+        RemoteNode node = remoteNode.get();
+        try {
+            TestSession testSession = new TestSession(sessionRequest, node, hubConfig.keepAuthorizationHeaders);
+            node.setBusy(true);
+            node.setTestSession(testSession);
+            logger.debug("Found a node for new session: {}", node.getId());
+            return testSession;
+        } finally {
+            node.accessLock.unlock();
+        }
     }
 
-    public List<RemoteNode> getSorted() {
+    private List<RemoteNode> getSorted() {
         List<RemoteNode> sorted = new ArrayList<>(remoteNodes.values());
         sorted.sort(proxyComparator);
         return sorted;
@@ -242,45 +318,50 @@ public class HubCore {
         return p1used < p2used ? -1 : 1;
     };
 
-    public void verifyDesiredCapabilities(Map<String, Object> desiredCapabilities) throws HubSessionException {
-
-        if (!hubConfig.throwOnCapabilityNotPresent) {
-            return;
-        }
-        if (remoteNodes.isEmpty()) {
-            throw new CapabilityNotFoundException("Empty hub, not possible to continue");
-        }
-
-        if (!hasCapability(desiredCapabilities)) {
-            throw new CapabilityNotFoundException("Hub can not find capability: " + desiredCapabilities);
-        }
-    }
-
-    public boolean hasCapability(Map<String, Object> requestedCapability) {
-        return remoteNodes.values().stream().anyMatch(remoteNode -> remoteNode.hasCapability(requestedCapability));
+    private boolean hasCapability(Map<String, Object> requestedCapability) {
+        return remoteNodes.values()
+                .stream()
+                .anyMatch(remoteNode -> hubConfig.capabilityMatcher.matches(remoteNode.getCapabilities(), requestedCapability));
     }
 
     public HubConfig getHubConfig() {
         return hubConfig;
     }
 
-    public void terminateTestSession(TestSession testSession) {
-        cleanSession(testSession, SessionTerminationReason.ORPHAN);
+    /**
+     * @param sessionKey session id
+     * @throws SessionClosedException   if session already closed
+     * @throws SessionNotFoundException if the session is inactive or not in the history table
+     */
+    public void terminateTestSession(String sessionKey) throws SessionClosedException, SessionNotFoundException {
+        cleanSession(getSession(sessionKey), SessionTerminationReason.ORPHAN);
     }
 
+    /**
+     * @return remote nodes as list
+     */
     public List<RemoteNode> getAllNodes() {
         return ImmutableList.copyOf(remoteNodes.values());
     }
 
+    /**
+     * @return reachable remote nodes as list
+     */
     public List<RemoteNode> getAllReachableNodes() {
         return remoteNodes.values().stream().filter(n -> !n.isDown()).collect(Collectors.toList());
     }
 
+    /**
+     * @return used remote nodes as list
+     */
     public List<RemoteNode> getUsedNodes() {
         return remoteNodes.values().stream().filter(RemoteNode::isBusy).collect(Collectors.toList());
     }
 
-    public Set<TestSession> getActiveSessions() {
-        return sessionManager.getActiveTestSessions();
+    /**
+     * @return active session count
+     */
+    public int getActiveSessionCount() {
+        return sessionManager.getActiveTestSessions().size();
     }
 }

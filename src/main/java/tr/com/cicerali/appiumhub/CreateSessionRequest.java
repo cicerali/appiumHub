@@ -10,12 +10,23 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-public class StartSessionRequest extends WebDriverRequest {
+/**
+ * Specifies new session request
+ */
+public class CreateSessionRequest extends WebDriverRequest {
+
     private final Map<String, Object> desiredCapabilities;
 
-    public StartSessionRequest(HttpServletRequest request) throws RequestParseException {
-        super(request);
-        this.requestType = RequestType.START_SESSION;
+    /**
+     * Represents a new session request object, and It will determine
+     * the desired capabilities from the original request body.
+     * Client can send it in different forms, so we need to make it suitable
+     *
+     * @param request original http servlet request
+     * @throws RequestParseException if extracting desired capabilities fail
+     */
+    public CreateSessionRequest(HttpServletRequest request) throws RequestParseException {
+        super(request, RequestType.START_SESSION);
         this.desiredCapabilities = extractDesiredCapabilities();
     }
 
@@ -24,7 +35,7 @@ public class StartSessionRequest extends WebDriverRequest {
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode root;
         try {
-            root = objectMapper.reader().readTree(new String(body));
+            root = objectMapper.reader().readTree(new String(getBody()));
         } catch (IOException e) {
             throw new RequestParseException("Could not parse request", e);
         }
@@ -61,6 +72,11 @@ public class StartSessionRequest extends WebDriverRequest {
         throw new RequestParseException("Could not found desired capabilities in request");
     }
 
+    /**
+     * It will return clients desired capabilities which extracted from request body
+     *
+     * @return desired capabilities
+     */
     public Map<String, Object> getDesiredCapabilities() {
         return desiredCapabilities;
     }

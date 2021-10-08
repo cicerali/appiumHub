@@ -1,15 +1,13 @@
 package tr.com.cicerali.appiumhub.exception;
 
-import java.util.Objects;
-
 public class HubRegisterException extends Exception {
 
-    public HubRegisterException(String message, Exception cause) {
-        super(message, Objects.requireNonNull(cause));
+    public HubRegisterException(String message, Throwable cause) {
+        super(message, cause);
     }
 
-    public HubRegisterException(Exception cause) {
-        super(Objects.requireNonNull(cause));
+    public HubRegisterException(Throwable cause) {
+        super(cause);
     }
 
     public HubRegisterException(String message) {

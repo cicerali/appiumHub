@@ -14,7 +14,7 @@ public class HubAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public HubConfig hubConfig(HubProperties hubProperties) {
-        return new HubConfig(hubProperties);
+        return HubConfig.HubConfigBuilder.fromHubProperties(hubProperties).build();
     }
 
     @Bean

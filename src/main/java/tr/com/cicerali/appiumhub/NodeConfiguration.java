@@ -4,8 +4,14 @@ package tr.com.cicerali.appiumhub;
 import javax.validation.constraints.NotNull;
 import java.net.URL;
 
+/**
+ * Specifies the node configuration sent by the registration request
+ * if one of the parameters is missing, the node registration process
+ * uses the default parameter specified by HubConfig
+ */
 public class NodeConfiguration {
 
+    @NotNull
     private String id;
     private Integer cleanUpCycle;
     private Integer timeout;
@@ -97,6 +103,10 @@ public class NodeConfiguration {
                 ", cleanUpCycle=" + cleanUpCycle +
                 ", timeout=" + timeout +
                 ", browserTimeout=" + browserTimeout +
+                ", nodePolling=" + nodePolling +
+                ", nodeStatusCheckTimeout=" + nodeStatusCheckTimeout +
+                ", unregisterIfStillDownAfter=" + unregisterIfStillDownAfter +
+                ", downPollingLimit=" + downPollingLimit +
                 ", url=" + url +
                 '}';
     }

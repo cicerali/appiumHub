@@ -13,9 +13,7 @@ import org.apache.http.ssl.SSLContexts;
 import org.apache.http.ssl.TrustStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.util.CollectionUtils;
 import org.springframework.web.client.RestTemplate;
 
 import javax.net.ssl.SSLContext;
@@ -26,10 +24,12 @@ import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * Specifies a remote node which means an appium instance
+ */
 public class RemoteNode {
 
     private static final Logger logger = LoggerFactory.getLogger(RemoteNode.class);
@@ -39,8 +39,8 @@ public class RemoteNode {
     private final NodeConfiguration configuration;
     private final RestTemplate restTemplate;
 
-    public final ReentrantLock lock = new ReentrantLock();
-    private volatile boolean isBusy = false;
+    public final ReentrantLock accessLock = new ReentrantLock();
+    private volatile boolean busy = false;
     private int useCount = 0;
     private long totalUsed = 0;
     private long lastSessionStart = -1;
@@ -52,10 +52,16 @@ public class RemoteNode {
 
     private volatile boolean down = false;
 
-    private final NodeControl nodeControl;
+    private final NodeWatchdog nodeWatchdog;
 
     private TestSession testSession;
 
+    /**
+     * @param registrationRequest node registration request
+     * @param capabilityMatcher   capability matcher
+     * @param hubCore             hub core
+     * @throws GeneralSecurityException if fail to construct https supported node
+     */
     public RemoteNode(RegistrationRequest registrationRequest, CapabilityMatcher capabilityMatcher, HubCore hubCore) throws GeneralSecurityException {
         this.registrationRequest = registrationRequest;
         this.capabilityMatcher = capabilityMatcher;
@@ -64,7 +70,7 @@ public class RemoteNode {
         this.configuration = createConfiguration();
         this.restTemplate = createRestTemplate();
         this.id = configuration.getId();
-        this.nodeControl = new NodeControl();
+        this.nodeWatchdog = new NodeWatchdog();
     }
 
     private Map<String, Object> createDesiredCapabilities() {
@@ -97,15 +103,7 @@ public class RemoteNode {
         requestFactory.setHttpClient(httpClient);
 
         RestTemplate template = new RestTemplate(requestFactory);
-        List<ClientHttpRequestInterceptor> interceptors = template.getInterceptors();
-        List<ClientHttpRequestInterceptor> fromHub = hubCore.getHubConfig().getInterceptors();
-        if (!CollectionUtils.isEmpty(fromHub)) {
-            if (CollectionUtils.isEmpty(interceptors)) {
-                template.setInterceptors(fromHub);
-            } else {
-                interceptors.addAll(fromHub);
-            }
-        }
+        template.getInterceptors().addAll(hubCore.getHubConfig().httpRequestInterceptors);
 
         return template;
     }
@@ -113,9 +111,7 @@ public class RemoteNode {
     private NodeConfiguration createConfiguration() {
 
         NodeConfiguration conf = new NodeConfiguration(registrationRequest.getConfiguration());
-        if (conf.getId() == null) {
-            conf.setId(conf.getUrl().toString());
-        }
+
         if (conf.getCleanUpCycle() == null) {
             conf.setCleanUpCycle(hubCore.getHubConfig().cleanUpCycle);
         }
@@ -164,11 +160,11 @@ public class RemoteNode {
     }
 
     public boolean isBusy() {
-        return isBusy;
+        return busy;
     }
 
     public void setBusy(boolean busy) {
-        isBusy = busy;
+        this.busy = busy;
     }
 
     public boolean isDown() {
@@ -235,24 +231,35 @@ public class RemoteNode {
         return capabilities;
     }
 
+    /**
+     * Try to delete session on remote node,
+     * Removes busy mark from node, so it will be ready for new sessions
+     */
     public void clean() {
-
-        /* clean test session info */
         testSession.deleteSession();
         testSession = null;
         setBusy(false);
     }
 
-    public void destroy(SessionTerminationReason reason) {
+    /**
+     * stop the control thread, remove itself from remote nodes
+     * and clean existing session
+     *
+     * @param reason session termination reason
+     */
+    public void tearDown(SessionTerminationReason reason) {
 
         /* stopping node control thread */
-        nodeControl.interrupt();
-        hubCore.remove(this);
+        nodeWatchdog.interrupt();
+        hubCore.remove(this.getId());
         if (testSession != null) {
             hubCore.cleanSession(testSession, reason);
         }
     }
 
+    /**
+     * @return {@code true} if remote node reachable
+     */
     public boolean isReachable() {
         try {
             getProxyStatus();
@@ -263,6 +270,10 @@ public class RemoteNode {
         }
     }
 
+    /**
+     * @return remote proxy status
+     * @throws MalformedURLException if remote url malformed
+     */
     public Map<String, Object> getProxyStatus() throws MalformedURLException {
 
         URL remoteURL = configuration.getUrl();
@@ -276,12 +287,18 @@ public class RemoteNode {
         });
     }
 
-    private class NodeControl extends Thread {
+    /**
+     * Reachability of the remote node will be checked, if not reachable it will be marked as down.
+     * If the configured timeout expires it will be destroyed the node
+     * Will check when session last used , if it exists. If inactivity timeout expires
+     * session will be cleaned
+     */
+    private class NodeWatchdog extends Thread {
 
         int failedPollingTries = 0;
         long downSince = 0;
 
-        public NodeControl() {
+        public NodeWatchdog() {
             super("nodeControl-" + id);
             start();
         }
@@ -312,7 +329,7 @@ public class RemoteNode {
                     long downFor = System.currentTimeMillis() - downSince;
                     if (downFor > configuration.getUnregisterIfStillDownAfter()) {
                         logger.info("Unregistering the node {} because it's been down for {} milliseconds", id, downFor);
-                        destroy(SessionTerminationReason.NODE_UNREACHABLE);
+                        tearDown(SessionTerminationReason.NODE_UNREACHABLE);
                     }
                 }
             } else {

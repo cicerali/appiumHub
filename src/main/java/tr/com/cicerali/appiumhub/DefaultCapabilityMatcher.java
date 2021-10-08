@@ -13,13 +13,21 @@ public class DefaultCapabilityMatcher implements CapabilityMatcher {
 
     private final List<Validator> validators = new ArrayList<>();
 
+    /**
+     * anything matching: null, "any", "", "*"
+     */
     private boolean anything(Object requested) {
         return requested == null ||
                 ImmutableSet.of("any", "", "*").contains(requested.toString().toLowerCase());
     }
 
-    DefaultCapabilityMatcher(boolean addDefault) {
-        if (!addDefault) {
+    /**
+     * Constructs a capability matcher with validator list
+     *
+     * @param includeDefaultValidators adds default validators to list
+     */
+    public DefaultCapabilityMatcher(boolean includeDefaultValidators) {
+        if (!includeDefaultValidators) {
             return;
         }
         validators.add(new AliasedStringPropertyValidator(true, "platformName", "platform"));
@@ -33,11 +41,17 @@ public class DefaultCapabilityMatcher implements CapabilityMatcher {
                 && validators.stream().allMatch(v -> v.apply(providedCapabilities, requestedCapabilities));
     }
 
+    /**
+     * Adds a new capability validator to validators list
+     *
+     * @param validator capability validator
+     */
     public void addValidator(Validator validator) {
         validators.add(validator);
     }
 
-    /* compare properties as object
+    /**
+     * compare properties as object
      * can compare multiple properties
      */
     public class SimplePropertyValidator implements Validator {
@@ -56,8 +70,9 @@ public class DefaultCapabilityMatcher implements CapabilityMatcher {
         }
     }
 
-    /* compare properties as object
-     * Properties can be defined with aliases
+    /**
+     * compare properties as an object.
+     * Properties can have aliases
      */
     public class AliasedPropertyValidator implements Validator {
         private final String[] propertyAliases;
@@ -87,8 +102,9 @@ public class DefaultCapabilityMatcher implements CapabilityMatcher {
         }
     }
 
-    /* compare properties as string
-     * Properties can be defined with aliases
+    /**
+     * compare properties as a string.
+     * Properties can have aliases
      */
     public class AliasedStringPropertyValidator implements Validator {
 

@@ -4,7 +4,11 @@ import java.util.List;
 import java.util.Map;
 
 public class SessionData {
+    /**
+     * session response map which keep remote nodes responses
+     */
     private List<Map<String, Object>> value;
+
     private int status;
 
     public SessionData(List<Map<String, Object>> value, int status) {

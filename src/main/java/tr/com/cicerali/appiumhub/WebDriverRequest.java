@@ -7,45 +7,51 @@ import tr.com.cicerali.appiumhub.exception.RequestParseException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletRequestWrapper;
 import java.io.IOException;
-import java.util.Optional;
 
+import static tr.com.cicerali.appiumhub.Constants.DEFAULT_BASE_PATH;
+
+/**
+ * Provides a base for all session request types
+ */
 public abstract class WebDriverRequest extends HttpServletRequestWrapper {
 
-    public static final String BASE_PATH = Optional.of("/wd/hub").get();
-    protected RequestType requestType = RequestType.REGULAR;
+    private final RequestType requestType;
     private final String path;
-    protected byte[] body;
+    private final byte[] body;
 
-    protected WebDriverRequest(HttpServletRequest request) throws RequestParseException {
+    /**
+     * @param request     original http servlet request
+     * @param requestType request type
+     * @throws RequestParseException if parsing request body fail
+     */
+    protected WebDriverRequest(HttpServletRequest request, RequestType requestType) throws RequestParseException {
         super(request);
-        this.path = findPathInfo();
-        readBody();
-    }
-
-    public String findPathInfo() {
-        return StringUtils.substringAfter(super.getRequestURI(), BASE_PATH);
-    }
-
-    public RequestType getRequestType() {
-        return requestType;
-    }
-
-    public byte[] getBody() {
-        return body;
-    }
-
-    public void setBody(byte[] body) {
-        this.body = body;
-    }
-
-    private void readBody() throws RequestParseException {
+        this.requestType = requestType;
+        this.path = StringUtils.substringAfter(super.getRequestURI(), DEFAULT_BASE_PATH);
         try {
-            setBody(IOUtils.toByteArray(super.getInputStream()));
+            this.body = IOUtils.toByteArray(super.getInputStream());
         } catch (IOException e) {
             throw new RequestParseException(e);
         }
     }
 
+    /**
+     * @return request type
+     */
+    public RequestType getRequestType() {
+        return requestType;
+    }
+
+    /**
+     * @return request body
+     */
+    public byte[] getBody() {
+        return body;
+    }
+
+    /**
+     * @return request path without base
+     */
     public String getPath() {
         return path;
     }
