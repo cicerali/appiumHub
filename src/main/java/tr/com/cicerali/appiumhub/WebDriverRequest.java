@@ -1,6 +1,6 @@
 package tr.com.cicerali.appiumhub;
 
-import org.apache.commons.io.IOUtils;
+import com.google.common.io.ByteStreams;
 import org.apache.commons.lang3.StringUtils;
 import tr.com.cicerali.appiumhub.exception.RequestParseException;
 
@@ -27,9 +27,9 @@ public abstract class WebDriverRequest extends HttpServletRequestWrapper {
     protected WebDriverRequest(HttpServletRequest request, RequestType requestType) throws RequestParseException {
         super(request);
         this.requestType = requestType;
-        this.path = StringUtils.substringAfter(super.getRequestURI(), DEFAULT_BASE_PATH);
+        this.path = StringUtils.substringAfter(getRequestURI(), DEFAULT_BASE_PATH);
         try {
-            this.body = IOUtils.toByteArray(super.getInputStream());
+            this.body = ByteStreams.toByteArray(getInputStream());
         } catch (IOException e) {
             throw new RequestParseException(e);
         }

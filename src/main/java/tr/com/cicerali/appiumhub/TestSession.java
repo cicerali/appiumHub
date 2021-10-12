@@ -1,8 +1,6 @@
 package tr.com.cicerali.appiumhub;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpEntity;
@@ -81,7 +79,7 @@ public class TestSession {
         try {
             forwardingRequest = true;
             ResponseEntity<byte[]> res = forwardRequest(createSessionRequest);
-            setSessionKey(res);
+            setSessionKeyAndData(res);
             if (this.sessionKey == null) {
                 throw new SessionCreateException("Proxy response does not contain session id");
             }
@@ -144,20 +142,20 @@ public class TestSession {
         return responseEntity;
     }
 
-    private void setSessionKey(ResponseEntity<byte[]> responseEntity) throws IOException {
+    private void setSessionKeyAndData(ResponseEntity<byte[]> responseEntity) {
 
         byte[] body = responseEntity.getBody();
         if (responseEntity.getStatusCodeValue() == HttpServletResponse.SC_OK && body != null) {
 
-            ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode root = objectMapper.reader().readTree(new String(body));
-            if (root.get("sessionId") == null) {
-                root = root.get("value");
+            JSONObject root = new JSONObject(new String(body));
+            if (root.has("sessionId")) {
+                this.sessionData.put("caps", root.getJSONObject("value").toMap());
+            } else {
+                root = root.getJSONObject("value");
+                this.sessionData.put("caps", root.getJSONObject("capabilities").toMap());
             }
-            this.sessionKey = root.get("sessionId").textValue();
+            this.sessionKey = root.optString("sessionId");
             this.sessionData.put("id", sessionKey);
-            this.sessionData.put("capabilities", objectMapper.convertValue(root.get("capabilities"), new TypeReference<Map<String, Object>>() {
-            }));
         }
     }
 

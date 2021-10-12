@@ -1,12 +1,9 @@
 package tr.com.cicerali.appiumhub;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.json.JSONObject;
 import tr.com.cicerali.appiumhub.exception.RequestParseException;
 
 import javax.servlet.http.HttpServletRequest;
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -32,41 +29,38 @@ public class CreateSessionRequest extends WebDriverRequest {
 
     private Map<String, Object> extractDesiredCapabilities() throws RequestParseException {
 
-        ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode root;
+        /* check JSONWP
+         * requiredCapabilities deprecated and removed selenium source code
+         * with 3.7.0 788936fa0597d0755185fa89566381d9555bf5a4 */
         try {
-            root = objectMapper.reader().readTree(new String(getBody()));
-        } catch (IOException e) {
+            JSONObject root = new JSONObject(new String(getBody()));
+            if (root.has("desiredCapabilities")) {
+                return root.getJSONObject("desiredCapabilities").toMap();
+            }
+        } catch (Exception e) {
             throw new RequestParseException("Could not parse request", e);
         }
 
-        /* check JSONWP */
-        JsonNode desiredCaps = root.get("desiredCapabilities");
-        if (desiredCaps != null) {
-            return objectMapper.convertValue(desiredCaps, new TypeReference<Map<String, Object>>() {
-            });
-        }
-
-        /* check W3C*/
-        JsonNode capabilities = root.get("capabilities");
-        if (capabilities != null) {
-            JsonNode aMatch = capabilities.get("alwaysMatch");
-            JsonNode fMatch = capabilities.get("firstMatch");
-
-            Map<String, Object> match;
-            if (aMatch != null || fMatch != null) {
-                match = new HashMap<>();
-                if (aMatch != null) {
-                    match.putAll(objectMapper.convertValue(aMatch, new TypeReference<Map<String, Object>>() {
-                    }));
-
-                    if (fMatch != null) {
-                        match.putAll(objectMapper.convertValue(aMatch, new TypeReference<Map<String, Object>>() {
-                        }));
+        /* check W3C */
+        try {
+            JSONObject root = new JSONObject(new String(getBody()));
+            if (root.has("capabilities")) {
+                JSONObject aMatch = root.optJSONObject("alwaysMatch");
+                JSONObject fMatch = root.optJSONObject("firstMatch");
+                Map<String, Object> match;
+                if (aMatch != null || fMatch != null) {
+                    match = new HashMap<>();
+                    if (aMatch != null) {
+                        match.putAll(aMatch.toMap());
                     }
+                    if (fMatch != null) {
+                        match.putAll(fMatch.toMap());
+                    }
+                    return match;
                 }
-                return match;
             }
+        } catch (Exception e) {
+            throw new RequestParseException("Could not parse request", e);
         }
 
         throw new RequestParseException("Could not found desired capabilities in request");

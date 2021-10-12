@@ -1,8 +1,5 @@
 package tr.com.cicerali.appiumhub;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.math.IntMath;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
@@ -11,6 +8,7 @@ import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.ssl.SSLContexts;
 import org.apache.http.ssl.TrustStrategy;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
@@ -26,6 +24,7 @@ import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -49,7 +48,6 @@ public class RemoteNode {
     private final CapabilityMatcher capabilityMatcher;
     private final HubCore hubCore;
     private final String id;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private volatile boolean down = false;
 
@@ -267,7 +265,7 @@ public class RemoteNode {
             getProxyStatus();
             return true;
         } catch (Exception e) {
-            logger.error("Failed to check status of node: {}", e.getMessage());
+            logger.warn("Failed to check status of node: {}", e.getMessage());
             return false;
         }
     }
@@ -283,10 +281,9 @@ public class RemoteNode {
         String ok = remoteURL + end;
         String uri = new URL(remoteURL, ok).toExternalForm();
 
-        JsonNode root = restTemplate.getForObject(uri, JsonNode.class);
+        String root = restTemplate.getForObject(uri, String.class);
 
-        return objectMapper.convertValue(root, new TypeReference<Map<String, Object>>() {
-        });
+        return new JSONObject(Objects.requireNonNull(root)).toMap();
     }
 
     /**

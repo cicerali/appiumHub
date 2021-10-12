@@ -64,7 +64,7 @@ public class HubCore {
 
             remoteNode = new RemoteNode(request, hubConfig.capabilityMatcher, this);
             remoteNodes.put(remoteNode.getId(), remoteNode);
-            logger.info("Node successfully registered: {}\nconfiguration: {}\ncapabilities: {}", remoteNode.getId(), remoteNode.getConfiguration(), remoteNode.getCapabilities());
+            logger.info("Node successfully registered: {}\n-->capabilities: {}\n---->configuration: {}", remoteNode.getId(), remoteNode.getCapabilities(), remoteNode.getConfiguration());
             wakeUpWaiters();
         } catch (Exception e) {
             throw new HubRegisterException("Failed to register node: " + id, e.getCause());
