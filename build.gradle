@@ -8,7 +8,7 @@ plugins {
 }
 
 group = 'tr.com.cicerali'
-version = '0.0.2-SNAPSHOT'
+version = '0.0.1'
 sourceCompatibility = '1.8'
 targetCompatibility = 1.8
 
@@ -52,7 +52,7 @@ model {
         publications {
             release(MavenPublication) {
 
-                version "0.2"
+                version '0.0.1'
                 from components.java
 
                 pom {
@@ -79,7 +79,7 @@ model {
 
         repositories {
             maven {
-                url = 'D:/Users/cicerali/Desktop/repo'
+                url = "D:/Users/$System.env.USERNAME/Desktop/repo"
             }
         }
     }
