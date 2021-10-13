@@ -61,7 +61,7 @@ public class TestSession {
      * @return remote node response
      * @throws IOException if proxying fail
      */
-    public ResponseEntity<byte[]> forwardRegularRequest(RegularSessionRequest sessionRequest) throws IOException {
+    public synchronized ResponseEntity<byte[]> forwardRegularRequest(RegularSessionRequest sessionRequest) throws IOException {
         try {
             forwardingRequest = true;
             return forwardRequest(sessionRequest);
@@ -94,7 +94,7 @@ public class TestSession {
     /**
      * deletes the session on the remote node, if any
      */
-    public void deleteSession() {
+    public synchronized void deleteSession() {
         if (!started || stopped) {
             return;
         }

@@ -31,7 +31,7 @@ public class HubConfig {
     @JsonRawValue
     public final List<TestSessionInterceptor> testSessionInterceptors;
 
-    public static final CapabilityMatcher testMatcher = (currentCapability, requestedCapability) -> true;
+    public static final CapabilityMatcher testMatcher = (providedCapabilities, requestedCapability) -> true;
 
     private HubConfig(HubProperties hubProperties, CapabilityMatcher capabilityMatcher, List<ClientHttpRequestInterceptor> httpRequestInterceptors, List<TestSessionInterceptor> testSessionInterceptors) {
 

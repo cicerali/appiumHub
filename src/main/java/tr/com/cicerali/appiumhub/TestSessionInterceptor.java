@@ -4,6 +4,7 @@ package tr.com.cicerali.appiumhub;
  * Interceptor for some test session requests.
  */
 public interface TestSessionInterceptor {
+
     /**
      * Called just after test session termination
      *

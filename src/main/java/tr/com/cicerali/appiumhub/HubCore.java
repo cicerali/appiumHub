@@ -83,7 +83,7 @@ public class HubCore {
      */
     public ResponseEntity<byte[]> processStartSession(HttpServletRequest request) throws RequestParseException, InterruptedException, CapabilityNotFoundException, SessionCreateException {
 
-        CreateSessionRequest sessionRequest = new CreateSessionRequest(request);
+        CreateSessionRequest sessionRequest = new CreateSessionRequest(request, hubConfig.capabilityMatcher.getCapabilityExtractor());
         logger.info("Trying to create new session with desired capabilities: {}", sessionRequest.getDesiredCapabilities());
 
         /* checking if any node has capability to handle this request
