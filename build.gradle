@@ -8,6 +8,7 @@ plugins {
 }
 
 group = 'tr.com.cicerali'
+archivesBaseName = 'appiumhub-spring-boot-starter'
 version = '0.0.1'
 sourceCompatibility = '1.8'
 targetCompatibility = 1.8
@@ -75,11 +76,25 @@ model {
                     }
                 }
             }
+            register("jar", MavenPublication) {
+                from(components["java"])
+                pom {
+                    url.set("https://maven.pkg.github.com/cicerali/appiumHub")
+                }
+            }
         }
 
         repositories {
             maven {
                 url = "D:/Users/$System.env.USERNAME/Desktop/repo"
+            }
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/cicerali/appiumHub")
+                credentials {
+                    username = 'cicerali'
+                    password = 'TOKEN'
+                }
             }
         }
     }
